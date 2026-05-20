@@ -1,4 +1,7 @@
-import { Howler } from 'howler';
+import { Howl, Howler } from 'howler';
+
+// Kevin MacLeod, "Heroic Age", CC-BY 4.0, incompetech.com
+const MUSIC_URL = '/assets/audio/heroic-age.mp3';
 
 /**
  * Lightweight procedural audio bus.
@@ -85,15 +88,57 @@ export function createAudioBus() {
     osc.stop(t + duration);
   }
 
+  // Real music — Howl playing the MacLeod CC-BY MP3
+  let musicHowl = null;
+  let musicVolume = 0.35;
+
   function startMusic() {
+    ensureContext();
+    if (musicHowl) {
+      if (!musicHowl.playing()) musicHowl.play();
+      return;
+    }
+    musicHowl = new Howl({
+      src: [MUSIC_URL],
+      loop: true,
+      volume: musicVolume,
+      html5: false,  // Web Audio for spatial/effect-routing support
+      onloaderror: (id, err) => {
+        console.warn('[audio] music load failed, falling back to procedural pad', err);
+        startProceduralPad();
+      },
+      onplayerror: () => {
+        // Autoplay block — try unlocking on next user gesture
+        musicHowl.once('unlock', () => musicHowl.play());
+      },
+    });
+    musicHowl.play();
+  }
+
+  function setMusicVolume(value) {
+    musicVolume = Math.max(0, Math.min(1, value));
+    musicHowl?.volume(musicVolume);
+    if (musicNodes?.gain) musicNodes.gain.gain.value = musicVolume * 0.06;
+  }
+
+  function stopMusic() {
+    musicHowl?.stop();
+    if (musicNodes) {
+      for (const o of musicNodes.oscs) o.stop();
+      musicNodes.gain?.disconnect();
+      musicNodes = null;
+    }
+  }
+
+  // Procedural fallback for when the MP3 can't load (offline, file missing, etc.)
+  function startProceduralPad() {
     const c = ensureContext();
     if (!c) return;
-
-    if (musicNodes) stopMusic();
+    if (musicNodes) return;
     musicNodes = { oscs: [], gain: null };
 
     const masterGain = c.createGain();
-    masterGain.gain.value = 0.06;
+    masterGain.gain.value = musicVolume * 0.06;
     masterGain.connect(c.destination);
     musicNodes.gain = masterGain;
 
@@ -117,18 +162,6 @@ export function createAudioBus() {
       lfo.start();
       musicNodes.oscs.push(osc, lfo);
     }
-  }
-
-  function setMusicVolume(value) {
-    if (!musicNodes?.gain) return;
-    musicNodes.gain.gain.value = Math.max(0, Math.min(1, value)) * 0.06;
-  }
-
-  function stopMusic() {
-    if (!musicNodes) return;
-    for (const o of musicNodes.oscs) o.stop();
-    musicNodes.gain?.disconnect();
-    musicNodes = null;
   }
 
   return {

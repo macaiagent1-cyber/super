@@ -32,6 +32,15 @@ npm test
 - M4 life — civilians + traffic + drone threats + procedural audio
 - M5 ship polish — HUD + pause menu + save + title + gamepad
 
+## Credits
+
+- HDRI sky — *Belfast Sunset (Pure Sky)* by Greg Zaal / Poly Haven — **CC0**
+- Music — *"Heroic Age"* by Kevin MacLeod (incompetech.com) — licensed under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- Physics — Rapier 3D (Apache-2.0) by Sébastien Crozet
+- Rendering — Three.js (MIT) — WebGPU + WebGL2 backends
+- Audio — Howler.js (MIT)
+- All meshes, materials, shaders, and gameplay code in `src/` are original/procedural
+
 ## License
 
-CC0 / MIT mixed (Poly Haven HDRI is CC0; project code is MIT-equivalent personal project).
+Project source code: MIT-equivalent personal project. Third-party assets retain their original licenses (see Credits).
