@@ -22,12 +22,24 @@ export async function startS1B() {
   addBatchedBuildings(renderSystem.scene, district.buildings, renderSystem.csm);
   addRoadMeshes(renderSystem.scene, district.roads, renderSystem.csm);
 
+  const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
+  const physicsWorld = await createPhysicsWorld();
+  for (const b of district.buildings) {
+    const halfX = b.size.x / 2;
+    const halfZ = b.size.z / 2;
+    physicsWorld.createStaticBox(
+      { x: b.position.x - halfX, y: 0, z: b.position.z - halfZ },
+      { x: b.position.x + halfX, y: b.size.y, z: b.position.z + halfZ },
+      'building'
+    );
+  }
+
   const collisionWorld = createCollisionWorld();
   collisionWorld.addBuildings(district.buildings);
 
   const input = createInputRouter();
   input.attach(canvas);
-  const hero = createHeroSystem({ scene: renderSystem.scene, csm: renderSystem.csm });
+  const hero = createHeroSystem({ scene: renderSystem.scene, csm: renderSystem.csm, physicsWorld });
   hero.setPosition({ x: 0, y: 34, z: 120 });
 
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });
@@ -59,6 +71,7 @@ export async function startS1B() {
     resize: renderSystem.resize,
     update(dt) {
       hero.update(input.getFlightIntent(), dt, collisionWorld);
+      physicsWorld.step(dt);
     },
     render(timing) {
       const pose = computeCameraRig({ hero: hero.state, previous: cameraMemory, dt: timing.dt || RENDER.fixedStep });
