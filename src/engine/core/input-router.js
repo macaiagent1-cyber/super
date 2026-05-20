@@ -109,6 +109,9 @@ export function createInputRouter() {
         punch: this._mousePressedFrame.has(0),
         heatVision: this.isDown('KeyE'),
         grab: this.isDown('KeyF') || this._mouseDown.has(2),
+        dodge: this.isPressed('Space') || this.isPressed('KeyQ') || this.isPressed('KeyR'),
+        dodgeX: (this.isPressed('KeyR') ? 1 : 0) - (this.isPressed('KeyQ') ? 1 : 0),
+        dodgeZ: this.isPressed('Space') ? -1 : 0,
       };
     },
   };

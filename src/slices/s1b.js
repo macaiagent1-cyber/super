@@ -4,9 +4,11 @@ import { RENDER } from '../engine/core/constants.js';
 import { createEngineLoop } from '../engine/core/engine-loop.js';
 import { eventBus } from '../engine/core/event-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
+import { createDodgeSystem } from '../engine/combat/dodge-system.js';
 import { createGrabSystem } from '../engine/combat/grab-throw.js';
 import { createHeatVisionSystem } from '../engine/combat/heat-vision.js';
 import { tryPunch } from '../engine/combat/punch-system.js';
+import { createImpactFx } from '../engine/vfx/impact-fx.js';
 import { createDevConsole, attachDevConsole } from '../engine/dev-tools/dev-console.js';
 import { createPerfHud } from '../engine/dev-tools/perf-hud.js';
 import { getForwardVector } from '../engine/hero/hero-flight.js';
@@ -79,6 +81,8 @@ export async function startS1B() {
     eventBus,
   });
   const grabSystem = createGrabSystem({ physicsWorld, eventBus });
+  const dodge = createDodgeSystem({ eventBus });
+  const impactFx = createImpactFx({ scene: renderSystem.scene });
 
   const input = createInputRouter();
   input.attach(canvas);
@@ -114,19 +118,28 @@ export async function startS1B() {
     resize: renderSystem.resize,
     update(dt) {
       const intent = input.getFlightIntent();
+      dodge.update(hero.state, intent, dt);
       hero.update(intent, dt, collisionWorld);
       grabSystem.update(hero.state, intent, dt);
       physicsWorld.step(dt);
       heatVision.update(hero.state, intent, dt);
+      impactFx.update(dt);
       if (intent.punch) {
-        tryPunch({
+        const fwd = getForwardVector(hero.state.yaw, hero.state.pitch);
+        const result = tryPunch({
           origin: hero.state.position,
-          forward: getForwardVector(hero.state.yaw, hero.state.pitch),
+          forward: fwd,
           physicsWorld,
           strength: 2200,
           range: 3,
           eventBus,
         });
+        if (result) {
+          impactFx.spawn({
+            position: result.point,
+            normal: { x: -fwd.x, y: -fwd.y, z: -fwd.z },
+          });
+        }
       }
     },
     render(timing) {
