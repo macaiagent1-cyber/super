@@ -1,13 +1,6 @@
-import { game } from './game.js';
-import { logger } from './engine/core/logger.js';
+import './styles.css';
 
-async function bootstrap() {
-  try {
-    await game.init();
-    game.start();
-  } catch (err) {
-    logger.error('main', 'Failed to bootstrap game', err);
-  }
-}
+const slice = import.meta.env.VITE_SUPER_SLICE || new URLSearchParams(window.location.search).get('slice') || 'S1A';
 
-bootstrap();
+document.body.dataset.slice = slice;
+document.getElementById('hud-root').textContent = `Super ${slice} booting`;
