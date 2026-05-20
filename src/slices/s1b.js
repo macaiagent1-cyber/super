@@ -16,6 +16,7 @@ import { tryPunch } from '../engine/combat/punch-system.js';
 import { createImpactFx } from '../engine/vfx/impact-fx.js';
 import { createDevConsole, attachDevConsole } from '../engine/dev-tools/dev-console.js';
 import { createPerfHud } from '../engine/dev-tools/perf-hud.js';
+import { createSaveStore } from '../engine/save/save-store.js';
 import { getForwardVector } from '../engine/hero/hero-flight.js';
 import { createHeroSystem } from '../engine/hero/hero-system.js';
 import { computeCameraRig, updateThreeCamera } from '../engine/render/camera-rig.js';
@@ -32,6 +33,20 @@ export async function startS1B() {
   const params = new URLSearchParams(window.location.search);
   const forceWebGL2 = params.has('forceWebGL2');
   const seed = Number(params.get('seed') || 42);
+  const saveStore = createSaveStore();
+  const savedData = saveStore.load();
+  const currentSettings = {
+    ...saveStore.DEFAULTS.settings,
+    ...(savedData.settings || {}),
+    backend: forceWebGL2 ? 'webgl2' : 'auto',
+  };
+  const progress = {
+    ...saveStore.DEFAULTS.progress,
+    ...(savedData.progress || {}),
+  };
+  document.body.dataset.quality = currentSettings.quality;
+  document.body.dataset.sensitivity = String(currentSettings.mouseSensitivity);
+  if (savedData._recoveredFromCorruption) showSaveRecoveryNotice(document.body);
   const renderSystem = await createRenderSystem({ canvas, forceWebGL2 });
   const district = generateDistrict({ seed });
   addBatchedBuildings(renderSystem.scene, district.buildings, renderSystem.csm);
@@ -44,9 +59,11 @@ export async function startS1B() {
   });
   const traffic = createTrafficSystem({ scene: renderSystem.scene, count: 8, csm: renderSystem.csm });
   const audioBus = createAudioBus();
+  audioBus.setMusicVolume?.(currentSettings.musicVolume);
   canvas.addEventListener('click', () => {
     audioBus.ensureContext();
     audioBus.startMusic();
+    audioBus.setMusicVolume?.(currentSettings.musicVolume);
   }, { once: true });
 
   const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
@@ -112,6 +129,9 @@ export async function startS1B() {
   eventBus.on('combat.destroyed', event => {
     if (event?.tag === 'car') audioBus.carImpact();
   });
+  eventBus.on('combat.throw', event => {
+    if (event?.tag === 'car') progress.carsThrown += 1;
+  });
   eventBus.on('combat.heatHit', hit => {
     if (hit.tag === 'car' && hit.bodyHandle !== undefined) {
       destructibles.damage(hit.bodyHandle, 30 * hit.dt);
@@ -138,13 +158,17 @@ export async function startS1B() {
   eventBus.on('threat.hitHero', event => {
     heroHp.current = Math.max(0, heroHp.current - (event?.damage ?? 0));
   });
+  eventBus.on('threat.destroyed', () => {
+    progress.threatsDestroyed += 1;
+  });
   const hud = createHudOverlay({ root: document.body });
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });
   const clock = createClock({ fixedStep: RENDER.fixedStep, maxDelta: RENDER.maxDelta });
   const cameraMemory = { x: 0, y: 38, z: 145 };
   let wasBoosting = false;
   let paused = false;
-  let mouseSensitivity = 1;
+  let mouseSensitivity = currentSettings.mouseSensitivity;
+  let saveTimer = 0;
 
   function updateEnergy(intent, dt) {
     if (intent.boost) heroEnergy.current = Math.max(0, heroEnergy.current - 25 * dt);
@@ -152,16 +176,37 @@ export async function startS1B() {
     else heroEnergy.current = Math.min(heroEnergy.max, heroEnergy.current + 18 * dt);
   }
 
+  function persistSave() {
+    currentSettings.quality = document.body.dataset.quality || currentSettings.quality;
+    currentSettings.mouseSensitivity = mouseSensitivity;
+
+    saveStore.save({
+      settings: { ...currentSettings },
+      progress: {
+        ...progress,
+        playTimeSeconds: Math.round(progress.playTimeSeconds * 100) / 100,
+      },
+    });
+  }
+
   const { consoleRoot, inputEl, outputEl } = buildConsoleDom();
   document.body.append(consoleRoot);
   const devConsole = createDevConsole({
-    setQuality: value => { document.body.dataset.quality = value; },
+    setQuality: value => {
+      document.body.dataset.quality = value;
+      if (isQualityValue(value)) {
+        currentSettings.quality = value;
+        persistSave();
+      }
+    },
     setSeed: value => {
       const next = new URL(window.location.href);
       next.searchParams.set('seed', String(value));
       window.location.href = next.toString();
     },
     setBackend: value => {
+      currentSettings.backend = value === 'webgl2' ? 'webgl2' : 'auto';
+      persistSave();
       const next = new URL(window.location.href);
       if (value === 'webgl2') next.searchParams.set('forceWebGL2', '1');
       else next.searchParams.delete('forceWebGL2');
@@ -173,6 +218,7 @@ export async function startS1B() {
 
   const pauseMenu = createPauseMenu({
     root: document.body,
+    initialSettings: currentSettings,
     onResume: () => {
       setPaused(false, { requestPointerLock: true });
     },
@@ -183,13 +229,19 @@ export async function startS1B() {
     },
     onSetQuality: quality => {
       document.body.dataset.quality = quality;
+      currentSettings.quality = quality;
+      persistSave();
     },
     onSetVolume: volume => {
+      currentSettings.musicVolume = volume;
       audioBus.setMusicVolume?.(volume);
+      persistSave();
     },
     onSetSensitivity: sensitivity => {
       mouseSensitivity = sensitivity;
+      currentSettings.mouseSensitivity = sensitivity;
       document.body.dataset.sensitivity = String(sensitivity);
+      persistSave();
     },
   });
 
@@ -222,12 +274,20 @@ export async function startS1B() {
     if (document.pointerLockElement !== canvas && !paused) setPaused(true);
   });
 
+  window.addEventListener('pagehide', persistSave);
+
   const loop = createEngineLoop({
     clock,
     input,
     resize: renderSystem.resize,
     update(dt) {
       if (paused) return;
+      saveTimer += dt;
+      progress.playTimeSeconds += dt;
+      if (saveTimer >= 5) {
+        saveTimer = 0;
+        persistSave();
+      }
       const intent = input.getFlightIntent();
       intent.lookX *= mouseSensitivity;
       intent.lookY *= mouseSensitivity;
@@ -345,4 +405,50 @@ function buildConsoleDom() {
   const outputEl = document.createElement('output');
   consoleRoot.append(inputEl, outputEl);
   return { consoleRoot, inputEl, outputEl };
+}
+
+function isQualityValue(value) {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'ultra';
+}
+
+function showSaveRecoveryNotice(root) {
+  if (root.querySelector('#save-recovery-notice')) return;
+
+  const notice = document.createElement('div');
+  notice.id = 'save-recovery-notice';
+  notice.style.cssText = [
+    'position:fixed',
+    'right:16px',
+    'bottom:16px',
+    'z-index:1200',
+    'max-width:min(360px,calc(100vw - 32px))',
+    'padding:12px 14px',
+    'background:rgba(15,22,34,0.94)',
+    'border:1px solid rgba(255,255,255,0.22)',
+    'border-radius:6px',
+    'box-shadow:0 10px 30px rgba(0,0,0,0.35)',
+    'color:#f4f7fb',
+    'font:0.85rem ui-sans-serif,system-ui,sans-serif',
+  ].join(';');
+
+  const message = document.createElement('span');
+  message.textContent = 'Save data was corrupted and reset to defaults. Old data was backed up to super:save:backup.';
+
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.textContent = 'Dismiss';
+  dismiss.style.cssText = [
+    'margin-left:12px',
+    'padding:4px 8px',
+    'border:1px solid rgba(255,255,255,0.22)',
+    'border-radius:4px',
+    'background:rgba(255,255,255,0.08)',
+    'color:#f4f7fb',
+    'font:inherit',
+    'cursor:pointer',
+  ].join(';');
+  dismiss.addEventListener('click', () => notice.remove());
+
+  notice.append(message, dismiss);
+  root.append(notice);
 }

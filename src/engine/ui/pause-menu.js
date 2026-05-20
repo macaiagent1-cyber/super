@@ -2,10 +2,22 @@
  * DOM-based pause menu. Triggered by Escape key.
  * Provides: Resume, Settings (quality, mouse sensitivity, music volume), New Game (re-seed).
  */
-export function createPauseMenu({ root, onResume, onSetSeed, onSetQuality, onSetVolume, onSetSensitivity }) {
+export function createPauseMenu({
+  root,
+  initialSettings = {},
+  onResume,
+  onSetSeed,
+  onSetQuality,
+  onSetVolume,
+  onSetSensitivity,
+}) {
   const overlay = document.createElement('div');
   overlay.className = 'pause-overlay';
   overlay.style.display = 'none';
+  const qualityOptions = ['low', 'medium', 'high', 'ultra'];
+  const initialQuality = qualityOptions.includes(initialSettings.quality) ? initialSettings.quality : 'high';
+  const initialSensitivity = numberOrDefault(initialSettings.mouseSensitivity, 1);
+  const initialVolume = numberOrDefault(initialSettings.musicVolume, 0.5);
 
   const panel = document.createElement('div');
   panel.className = 'pause-panel';
@@ -21,13 +33,13 @@ export function createPauseMenu({ root, onResume, onSetSeed, onSetQuality, onSet
   const settings = document.createElement('div');
   settings.className = 'pause-settings';
 
-  const qualityRow = makeRow('Quality', ['low', 'medium', 'high', 'ultra'], 'high', value => {
+  const qualityRow = makeRow('Quality', qualityOptions, initialQuality, value => {
     onSetQuality?.(value);
   });
-  const sensRow = makeSliderRow('Mouse Sensitivity', 0.2, 2.5, 1, 0.1, value => {
+  const sensRow = makeSliderRow('Mouse Sensitivity', 0.2, 2.5, initialSensitivity, 0.1, value => {
     onSetSensitivity?.(value);
   });
-  const volRow = makeSliderRow('Music Volume', 0, 1, 0.5, 0.05, value => {
+  const volRow = makeSliderRow('Music Volume', 0, 1, initialVolume, 0.05, value => {
     onSetVolume?.(value);
   });
 
@@ -132,5 +144,9 @@ export function createPauseMenu({ root, onResume, onSetSeed, onSetQuality, onSet
     });
     row.append(labelEl, input);
     return row;
+  }
+
+  function numberOrDefault(value, fallback) {
+    return Number.isFinite(value) ? value : fallback;
   }
 }
