@@ -2,7 +2,7 @@ export async function createWebGPUBackend({ canvas, antialias = true }) {
   if (!navigator.gpu) {
     throw new Error('WebGPU unavailable');
   }
-  const { default: WebGPURenderer } = await import('three/webgpu');
+  const { WebGPURenderer } = await import('three/webgpu');
   const renderer = new WebGPURenderer({ canvas, antialias });
   await renderer.init();
   return {
