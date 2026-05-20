@@ -1,0 +1,62 @@
+# Deploy Super to GitHub Pages on every push to main/master.
+# Vite gets SUPER_BASE_PATH from configure-pages so assets resolve correctly
+# at https://<user>.github.io/<repo>/.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:unit -- --run
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Read base path into env
+        # Move action output into env so the run step can reference it via
+        # shell-quoted env var instead of inline ${{ }}, avoiding any
+        # injection surface even though configure-pages output is trusted.
+        run: echo "SUPER_BASE_PATH=$PAGES_BASE" >> "$GITHUB_ENV"
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+
+      - name: Build with Vite
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
