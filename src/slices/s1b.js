@@ -1,9 +1,12 @@
 import { createClock } from '../engine/core/clock.js';
 import { RENDER } from '../engine/core/constants.js';
 import { createEngineLoop } from '../engine/core/engine-loop.js';
+import { eventBus } from '../engine/core/event-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
+import { tryPunch } from '../engine/combat/punch-system.js';
 import { createDevConsole, attachDevConsole } from '../engine/dev-tools/dev-console.js';
 import { createPerfHud } from '../engine/dev-tools/perf-hud.js';
+import { getForwardVector } from '../engine/hero/hero-flight.js';
 import { createHeroSystem } from '../engine/hero/hero-system.js';
 import { computeCameraRig, updateThreeCamera } from '../engine/render/camera-rig.js';
 import { addBatchedBuildings, addRoadMeshes } from '../engine/render/instancing-system.js';
@@ -70,8 +73,19 @@ export async function startS1B() {
     input,
     resize: renderSystem.resize,
     update(dt) {
-      hero.update(input.getFlightIntent(), dt, collisionWorld);
+      const intent = input.getFlightIntent();
+      hero.update(intent, dt, collisionWorld);
       physicsWorld.step(dt);
+      if (intent.punch) {
+        tryPunch({
+          origin: hero.state.position,
+          forward: getForwardVector(hero.state.yaw, hero.state.pitch),
+          physicsWorld,
+          strength: 2200,
+          range: 3,
+          eventBus,
+        });
+      }
     },
     render(timing) {
       const pose = computeCameraRig({ hero: hero.state, previous: cameraMemory, dt: timing.dt || RENDER.fixedStep });

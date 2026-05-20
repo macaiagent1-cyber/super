@@ -26,4 +26,19 @@ describe('input router', () => {
     expect(input.mouseDeltaX).toBe(20);
     expect(input.mouseDeltaY).toBe(-10);
   });
+
+  it('double-buffers mouse button presses for punch intent', () => {
+    const input = createInputRouter();
+    input.handleMouseDown({ button: 0 });
+    expect(input.isMouseDown(0)).toBe(true);
+    expect(input.isMousePressed(0)).toBe(false);
+    input.update();
+    expect(input.isMousePressed(0)).toBe(true);
+    expect(input.getFlightIntent().punch).toBe(true);
+    input.update();
+    expect(input.isMousePressed(0)).toBe(false);
+    expect(input.getFlightIntent().punch).toBe(false);
+    input.handleMouseUp({ button: 0 });
+    expect(input.isMouseDown(0)).toBe(false);
+  });
 });
