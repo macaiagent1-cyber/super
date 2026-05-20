@@ -9,7 +9,7 @@ export function clusterBuildingsForBatches(buildings, maxBatches = 5) {
   return clusters.filter(cluster => cluster.length > 0);
 }
 
-export function addBatchedBuildings(scene, buildings) {
+export function addBatchedBuildings(scene, buildings, csm = null) {
   const clusters = clusterBuildingsForBatches(buildings, 5);
   const meshes = [];
 
@@ -22,6 +22,9 @@ export function addBatchedBuildings(scene, buildings) {
         new THREE.MeshStandardMaterial({ color: new THREE.Color(building.color), roughness: 0.84 })
       );
       mesh.position.set(building.position.x, building.position.y, building.position.z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      setupCsmMaterial(csm, mesh.material);
       group.add(mesh);
     }
     scene.add(group);
@@ -31,7 +34,7 @@ export function addBatchedBuildings(scene, buildings) {
   return meshes;
 }
 
-export function addRoadMeshes(scene, roads) {
+export function addRoadMeshes(scene, roads, csm = null) {
   const meshes = [];
   for (const road of roads) {
     const mesh = new THREE.Mesh(
@@ -39,8 +42,19 @@ export function addRoadMeshes(scene, roads) {
       new THREE.MeshStandardMaterial({ color: new THREE.Color(road.color), roughness: 0.95 })
     );
     mesh.position.set(road.position.x, road.position.y, road.position.z);
+    mesh.receiveShadow = true;
+    setupCsmMaterial(csm, mesh.material);
     scene.add(mesh);
     meshes.push(mesh);
   }
   return meshes;
+}
+
+function setupCsmMaterial(csm, material) {
+  if (!csm) return;
+
+  const materials = Array.isArray(material) ? material : [material];
+  for (const entry of materials) {
+    if (entry) csm.setupMaterial(entry);
+  }
 }

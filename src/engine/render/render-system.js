@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PMREMGenerator } from 'three';
 import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+import { CSM } from 'three/addons/csm/CSM.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -11,6 +12,7 @@ import { createWebGL2Backend } from './webgl2-backend.js';
 
 const HDRI_PATH = '/assets/hdri/belfast_sunset_puresky_2k.exr';
 const SOFTWARE_WEBGL_COMPOSER_PIXEL_RATIO = 0.25;
+const SUN_DIRECTION = new THREE.Vector3(-0.7, -1.0, -0.7).normalize();
 
 export function chooseRenderBackend({ forceWebGL2, hasWebGPU }) {
   return forceWebGL2 || !hasWebGPU ? 'webgl2' : 'webgpu';
@@ -43,9 +45,11 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
   const camera = new THREE.PerspectiveCamera(RENDER.cameraFov, 1, 0.1, 1200);
   camera.position.set(0, 18, 36);
 
-  const sun = new THREE.DirectionalLight(0xffffff, 2.5);
-  sun.position.set(90, 140, 80);
-  scene.add(sun);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const csm = createCsm({ scene, camera, backendLabel: backend.label });
+  if (!csm) createFallbackSun(scene);
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(900, 900),
@@ -53,6 +57,7 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
+  csm?.setupMaterial(ground.material);
   scene.add(ground);
 
   const composer = backend.label === 'webgl2-low'
@@ -73,9 +78,13 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
     renderer,
     scene,
     camera,
+    csm,
     getAdapterInfo: backend.getAdapterInfo,
     resize,
     render() {
+      csm?.updateFrustums();
+      csm?.update();
+
       if (composer) {
         composer.render();
         return;
@@ -92,6 +101,45 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
       };
     },
   };
+}
+
+function createCsm({ scene, camera, backendLabel }) {
+  if (backendLabel === 'webgpu-high') return null;
+
+  try {
+    return new CSM({
+      maxFar: 600,
+      cascades: 3,
+      mode: 'practical',
+      parent: scene,
+      shadowMapSize: 1024,
+      lightDirection: SUN_DIRECTION.clone(),
+      lightIntensity: 2.8,
+      lightColor: new THREE.Color(0xffffff),
+      camera,
+    });
+  } catch (error) {
+    console.warn('[render] CSM failed, falling back to a single shadow sun', error);
+    return null;
+  }
+}
+
+function createFallbackSun(scene) {
+  const sun = new THREE.DirectionalLight(0xffffff, 2.8);
+  sun.castShadow = true;
+  sun.position.copy(SUN_DIRECTION).multiplyScalar(-180);
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 600;
+  sun.shadow.camera.left = -300;
+  sun.shadow.camera.right = 300;
+  sun.shadow.camera.top = 300;
+  sun.shadow.camera.bottom = -300;
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.shadow.bias = -0.0002;
+  scene.add(sun);
+  scene.add(sun.target);
+  return sun;
 }
 
 async function applyHdriEnvironment({ renderer, scene, backendLabel }) {

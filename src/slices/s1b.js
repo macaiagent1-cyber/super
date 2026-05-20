@@ -19,15 +19,15 @@ export async function startS1B() {
   const seed = Number(params.get('seed') || 42);
   const renderSystem = await createRenderSystem({ canvas, forceWebGL2 });
   const district = generateDistrict({ seed });
-  addBatchedBuildings(renderSystem.scene, district.buildings);
-  addRoadMeshes(renderSystem.scene, district.roads);
+  addBatchedBuildings(renderSystem.scene, district.buildings, renderSystem.csm);
+  addRoadMeshes(renderSystem.scene, district.roads, renderSystem.csm);
 
   const collisionWorld = createCollisionWorld();
   collisionWorld.addBuildings(district.buildings);
 
   const input = createInputRouter();
   input.attach(canvas);
-  const hero = createHeroSystem({ scene: renderSystem.scene });
+  const hero = createHeroSystem({ scene: renderSystem.scene, csm: renderSystem.csm });
   hero.setPosition({ x: 0, y: 34, z: 120 });
 
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });

@@ -18,9 +18,9 @@ export async function startS1A() {
   const input = createInputRouter();
   input.attach(canvas);
 
-  const hero = createHeroSystem({ scene: renderSystem.scene });
+  const hero = createHeroSystem({ scene: renderSystem.scene, csm: renderSystem.csm });
   hero.setPosition({ x: 0, y: 16, z: 48 });
-  addBoxes(renderSystem.scene);
+  addBoxes(renderSystem.scene, renderSystem.csm);
 
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });
   const clock = createClock({ fixedStep: RENDER.fixedStep, maxDelta: RENDER.maxDelta });
@@ -67,17 +67,20 @@ function buildConsoleDom() {
   return { consoleRoot, inputEl, outputEl };
 }
 
-function addBoxes(scene) {
+function addBoxes(scene, csm = null) {
   const geometry = new THREE.BoxGeometry(8, 16, 8);
   for (let i = 0; i < 20; i += 1) {
     const material = new THREE.MeshStandardMaterial({
       color: new THREE.Color().setHSL((i * 0.07) % 1, 0.46, 0.52),
       roughness: 0.82,
     });
+    csm?.setupMaterial(material);
     const mesh = new THREE.Mesh(geometry, material);
     const x = (i % 5 - 2) * 24;
     const z = (Math.floor(i / 5) - 2) * 24;
     mesh.position.set(x, 8, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     scene.add(mesh);
   }
 }
