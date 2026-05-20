@@ -1,7 +1,16 @@
 import * as THREE from 'three';
+import { PMREMGenerator } from 'three';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { RENDER } from '../core/constants.js';
 import { createWebGPUBackend } from './webgpu-backend.js';
 import { createWebGL2Backend } from './webgl2-backend.js';
+
+const HDRI_PATH = '/assets/hdri/belfast_sunset_puresky_2k.exr';
+const SOFTWARE_WEBGL_COMPOSER_PIXEL_RATIO = 0.25;
 
 export function chooseRenderBackend({ forceWebGL2, hasWebGPU }) {
   return forceWebGL2 || !hasWebGPU ? 'webgl2' : 'webgpu';
@@ -29,16 +38,14 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
   renderer.toneMappingExposure = 1;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x8fc7ff);
-  scene.fog = new THREE.Fog(0x8fc7ff, 240, 680);
+  await applyHdriEnvironment({ renderer, scene, backendLabel: backend.label });
 
   const camera = new THREE.PerspectiveCamera(RENDER.cameraFov, 1, 0.1, 1200);
   camera.position.set(0, 18, 36);
 
-  const sun = new THREE.DirectionalLight(0xffffff, 3.5);
+  const sun = new THREE.DirectionalLight(0xffffff, 2.5);
   sun.position.set(90, 140, 80);
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3b4658, 1.4));
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(900, 900),
@@ -48,10 +55,15 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
   ground.receiveShadow = true;
   scene.add(ground);
 
+  const composer = backend.label === 'webgl2-low'
+    ? createBloomComposer({ renderer, scene, camera, canvas })
+    : null;
+
   function resize() {
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
     renderer.setSize(width, height, false);
+    composer?.setSize(width, height);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
@@ -64,6 +76,11 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
     getAdapterInfo: backend.getAdapterInfo,
     resize,
     render() {
+      if (composer) {
+        composer.render();
+        return;
+      }
+
       renderer.render(scene, camera);
     },
     getStats() {
@@ -75,4 +92,104 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
       };
     },
   };
+}
+
+async function applyHdriEnvironment({ renderer, scene, backendLabel }) {
+  const loader = new EXRLoader();
+  const texture = await loader.loadAsync(HDRI_PATH);
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+
+  const PMREM = await getPmremGeneratorClass(backendLabel);
+  const pmremGenerator = new PMREM(renderer);
+  const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+
+  scene.environment = envMap;
+  scene.background = envMap;
+  scene.fog = new THREE.Fog(sampleHdriAmbient(texture), 240, 680);
+
+  texture.dispose();
+  pmremGenerator.dispose();
+}
+
+async function getPmremGeneratorClass(backendLabel) {
+  if (backendLabel !== 'webgpu-high') return PMREMGenerator;
+
+  const { PMREMGenerator: WebGPUPMREMGenerator } = await import('three/webgpu');
+  return WebGPUPMREMGenerator;
+}
+
+function sampleHdriAmbient(texture) {
+  const image = texture.image;
+  if (!image?.data || !image.width || !image.height) {
+    return new THREE.Color(0xc1ad91);
+  }
+
+  const { data, width, height } = image;
+  const channels = Math.max(3, Math.floor(data.length / (width * height)));
+  const xStep = Math.max(1, Math.floor(width / 16));
+  const yStep = Math.max(1, Math.floor(height / 8));
+  const yStart = Math.floor(height * 0.4);
+  const yEnd = Math.floor(height * 0.62);
+  const read = texture.type === THREE.HalfFloatType
+    ? index => THREE.DataUtils.fromHalfFloat(data[index])
+    : index => data[index];
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let samples = 0;
+
+  for (let y = yStart; y < yEnd; y += yStep) {
+    for (let x = 0; x < width; x += xStep) {
+      const offset = (y * width + x) * channels;
+      const texelR = read(offset);
+      const texelG = read(offset + 1);
+      const texelB = read(offset + 2);
+      const peak = Math.max(texelR, texelG, texelB);
+
+      if (!Number.isFinite(peak) || peak <= 0) continue;
+
+      const sunClamp = peak > 4 ? 4 / peak : 1;
+      r += texelR * sunClamp;
+      g += texelG * sunClamp;
+      b += texelB * sunClamp;
+      samples += 1;
+    }
+  }
+
+  if (samples === 0) return new THREE.Color(0xc1ad91);
+
+  const exposure = 1.15 / samples;
+  return new THREE.Color(
+    1 - Math.exp(-r * exposure),
+    1 - Math.exp(-g * exposure),
+    1 - Math.exp(-b * exposure)
+  );
+}
+
+function createBloomComposer({ renderer, scene, camera, canvas }) {
+  const width = canvas.clientWidth || window.innerWidth;
+  const height = canvas.clientHeight || window.innerHeight;
+  const composer = new EffectComposer(renderer);
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.6, 0.4, 0.85);
+
+  if (isSoftwareWebGLRenderer(renderer)) {
+    composer.setPixelRatio(SOFTWARE_WEBGL_COMPOSER_PIXEL_RATIO);
+  }
+
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+
+  return composer;
+}
+
+function isSoftwareWebGLRenderer(renderer) {
+  const context = renderer.getContext?.();
+  const debugInfo = context?.getExtension?.('WEBGL_debug_renderer_info');
+  const rendererInfo = debugInfo
+    ? context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+    : context?.getParameter?.(context.RENDERER);
+
+  return /llvmpipe|software|swiftshader/i.test(rendererInfo || '');
 }
