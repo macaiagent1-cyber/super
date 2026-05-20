@@ -1,3 +1,11 @@
+function pollGamepad() {
+  const pads = globalThis.navigator?.getGamepads?.() || [];
+  for (const pad of pads) {
+    if (pad && pad.connected) return pad;
+  }
+  return null;
+}
+
 export function createInputRouter() {
   return {
     _keys: {},
@@ -12,6 +20,7 @@ export function createInputRouter() {
     mouseDeltaY: 0,
     pointerLocked: false,
     canvas: null,
+    _lastPadA: false,
 
     attach(canvas, target = window, doc = document) {
       this.canvas = canvas;
@@ -79,6 +88,7 @@ export function createInputRouter() {
       this._pendingMouseY = 0;
       this.mouseDeltaX = 0;
       this.mouseDeltaY = 0;
+      this._lastPadA = false;
     },
 
     isDown(code) {
@@ -98,7 +108,7 @@ export function createInputRouter() {
     },
 
     getFlightIntent() {
-      return {
+      const intent = {
         pitch: (this.isDown('KeyS') ? 1 : 0) - (this.isDown('KeyW') ? 1 : 0),
         yaw: (this.isDown('KeyD') ? 1 : 0) - (this.isDown('KeyA') ? 1 : 0),
         throttle: this.isDown('KeyW') ? 1 : 0,
@@ -113,6 +123,32 @@ export function createInputRouter() {
         dodgeX: (this.isPressed('KeyR') ? 1 : 0) - (this.isPressed('KeyQ') ? 1 : 0),
         dodgeZ: this.isPressed('Space') ? -1 : 0,
       };
+
+      const pad = pollGamepad();
+      if (pad) {
+        const deadzone = 0.15;
+        const lx = Math.abs(pad.axes[0]) > deadzone ? pad.axes[0] : 0;
+        const ly = Math.abs(pad.axes[1]) > deadzone ? pad.axes[1] : 0;
+        const rx = Math.abs(pad.axes[2]) > deadzone ? pad.axes[2] : 0;
+        const ry = Math.abs(pad.axes[3]) > deadzone ? pad.axes[3] : 0;
+        intent.yaw += lx;
+        intent.pitch += ly;
+        intent.throttle = Math.max(intent.throttle, -ly > 0 ? -ly : 0);
+        intent.lookX += rx * 8;
+        intent.lookY += ry * 8;
+        if (pad.buttons[7]?.pressed) intent.boost = true;
+        if (pad.buttons[5]?.pressed) intent.punch = true;
+        if (pad.buttons[6]?.pressed) intent.heatVision = true;
+        if (pad.buttons[2]?.pressed) intent.grab = true;
+        const padAPressed = !!pad.buttons[0]?.pressed;
+        if (padAPressed && !this._lastPadA) {
+          intent.dodge = true;
+          intent.dodgeZ = -1;
+        }
+        this._lastPadA = padAPressed;
+      }
+
+      return intent;
     },
   };
 }

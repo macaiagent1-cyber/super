@@ -15,12 +15,17 @@ async function expectFpsAtLeast(page, minimum) {
   await expect.poll(() => readFps(page), { timeout: 5000 }).toBeGreaterThanOrEqual(minimum);
 }
 
+async function clickTitlePlay(page) {
+  await page.locator('.title-play').click();
+}
+
 test('S1B boots 3x3 city on default backend without console errors', async ({ page }) => {
   const errors = [];
   page.on('console', msg => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
   await page.goto('/?slice=S1B&seed=42');
+  await clickTitlePlay(page);
   await expect(page.locator('#hud-root')).toContainText(/webgpu-high|webgl2-low/, { timeout: 8000 });
   await page.waitForTimeout(2500);
   const backend = await readBackend(page);
@@ -31,6 +36,7 @@ test('S1B boots 3x3 city on default backend without console errors', async ({ pa
 
 test('S1B forced WebGL2 stays above low-tier smoke budget', async ({ page }) => {
   await page.goto('/?slice=S1B&seed=42&forceWebGL2=1');
+  await clickTitlePlay(page);
   await expect(page.locator('#hud-root')).toContainText('webgl2-low', { timeout: 8000 });
   await page.waitForTimeout(2500);
   await expectFpsAtLeast(page, 30);

@@ -24,6 +24,7 @@ import { addBatchedBuildings, addRoadMeshes } from '../engine/render/instancing-
 import { createRenderSystem } from '../engine/render/render-system.js';
 import { createHudOverlay } from '../engine/ui/hud-overlay.js';
 import { createPauseMenu } from '../engine/ui/pause-menu.js';
+import { createTitleScreen } from '../engine/ui/title-screen.js';
 import { createCollisionWorld } from '../engine/world/collision-world.js';
 import { generateDistrict } from '../engine/world/district-generator.js';
 
@@ -60,11 +61,6 @@ export async function startS1B() {
   const traffic = createTrafficSystem({ scene: renderSystem.scene, count: 8, csm: renderSystem.csm });
   const audioBus = createAudioBus();
   audioBus.setMusicVolume?.(currentSettings.musicVolume);
-  canvas.addEventListener('click', () => {
-    audioBus.ensureContext();
-    audioBus.startMusic();
-    audioBus.setMusicVolume?.(currentSettings.musicVolume);
-  }, { once: true });
 
   const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
   const physicsWorld = await createPhysicsWorld();
@@ -244,6 +240,15 @@ export async function startS1B() {
       persistSave();
     },
   });
+  const title = createTitleScreen({
+    root: document.body,
+    onStart: () => {
+      audioBus.ensureContext();
+      audioBus.startMusic();
+      audioBus.setMusicVolume?.(currentSettings.musicVolume);
+      canvas.requestPointerLock?.();
+    },
+  });
 
   function setPaused(nextPaused, { requestPointerLock = false } = {}) {
     if (paused === nextPaused) {
@@ -267,11 +272,14 @@ export async function startS1B() {
   window.addEventListener('keydown', event => {
     if (event.code !== 'Escape' || event.repeat) return;
     event.preventDefault?.();
+    if (title.isShown()) return;
     setPaused(!paused, { requestPointerLock: paused });
   });
 
   document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement !== canvas && !paused) setPaused(true);
+    if (document.pointerLockElement !== canvas && !paused && !pauseMenu.isVisible() && !title.isShown()) {
+      setPaused(true);
+    }
   });
 
   window.addEventListener('pagehide', persistSave);
