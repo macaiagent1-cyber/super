@@ -7,13 +7,11 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { RENDER } from '../core/constants.js';
+import { assetUrl } from '../core/asset-url.js';
 import { createWebGPUBackend } from './webgpu-backend.js';
 import { createWebGL2Backend } from './webgl2-backend.js';
 
-// import.meta.env.BASE_URL respects Vite's `base` config so the HDRI
-// resolves on both root-served hosts (`/assets/hdri/...`) and path-served
-// hosts like GitHub Pages (`/super/assets/hdri/...`) without code change.
-const HDRI_PATH = `${import.meta.env.BASE_URL}assets/hdri/belfast_sunset_puresky_2k.exr`;
+const HDRI_PATH = assetUrl('assets/hdri/belfast_sunset_puresky_2k.exr');
 const SOFTWARE_WEBGL_COMPOSER_PIXEL_RATIO = 0.25;
 const SUN_DIRECTION = new THREE.Vector3(-0.7, -1.0, -0.7).normalize();
 
