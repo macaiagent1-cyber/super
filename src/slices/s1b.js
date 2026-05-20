@@ -21,6 +21,7 @@ import { createHeroSystem } from '../engine/hero/hero-system.js';
 import { computeCameraRig, updateThreeCamera } from '../engine/render/camera-rig.js';
 import { addBatchedBuildings, addRoadMeshes } from '../engine/render/instancing-system.js';
 import { createRenderSystem } from '../engine/render/render-system.js';
+import { createHudOverlay } from '../engine/ui/hud-overlay.js';
 import { createCollisionWorld } from '../engine/world/collision-world.js';
 import { generateDistrict } from '../engine/world/district-generator.js';
 
@@ -131,10 +132,22 @@ export async function startS1B() {
   });
   threats.update(0, hero.state);
 
+  const heroHp = { current: 100, max: 100 };
+  const heroEnergy = { current: 100, max: 100 };
+  eventBus.on('threat.hitHero', event => {
+    heroHp.current = Math.max(0, heroHp.current - (event?.damage ?? 0));
+  });
+  const hud = createHudOverlay({ root: document.body });
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });
   const clock = createClock({ fixedStep: RENDER.fixedStep, maxDelta: RENDER.maxDelta });
   const cameraMemory = { x: 0, y: 38, z: 145 };
   let wasBoosting = false;
+
+  function updateEnergy(intent, dt) {
+    if (intent.boost) heroEnergy.current = Math.max(0, heroEnergy.current - 25 * dt);
+    else if (intent.heatVision) heroEnergy.current = Math.max(0, heroEnergy.current - 35 * dt);
+    else heroEnergy.current = Math.min(heroEnergy.max, heroEnergy.current + 18 * dt);
+  }
 
   const { consoleRoot, inputEl, outputEl } = buildConsoleDom();
   document.body.append(consoleRoot);
@@ -161,6 +174,11 @@ export async function startS1B() {
     resize: renderSystem.resize,
     update(dt) {
       const intent = input.getFlightIntent();
+      if (heroEnergy.current < 8) {
+        intent.boost = false;
+        intent.heatVision = false;
+      }
+      updateEnergy(intent, dt);
       if (intent.boost && !wasBoosting) audioBus.boostWhoosh();
       wasBoosting = intent.boost;
       dodge.update(hero.state, intent, dt);
@@ -185,6 +203,15 @@ export async function startS1B() {
       civilians.update(dt, hero.state);
       traffic.update(dt);
       impactFx.update(dt);
+      hud.update({
+        hp: heroHp.current,
+        hpMax: heroHp.max,
+        energy: heroEnergy.current,
+        energyMax: heroEnergy.max,
+        heroPos: hero.state.position,
+        threats: threats.drones,
+        cars,
+      });
       if (intent.punch) {
         const fwd = getForwardVector(hero.state.yaw, hero.state.pitch);
         const droneHit = threats.raycastDrones(hero.state.position, fwd, 6);
