@@ -1,7 +1,10 @@
 import { Howl, Howler } from 'howler';
 
 // Kevin MacLeod, "Heroic Age", CC-BY 4.0, incompetech.com
-const MUSIC_URL = '/assets/audio/heroic-age.mp3';
+// import.meta.env.BASE_URL respects Vite's `base` config so the asset
+// resolves on root-served hosts (Vercel/Netlify/local: `/assets/...`) and
+// path-served hosts (GitHub Pages: `/super/assets/...`) without code change.
+const MUSIC_URL = `${import.meta.env.BASE_URL}assets/audio/heroic-age.mp3`;
 
 /**
  * Lightweight procedural audio bus.
