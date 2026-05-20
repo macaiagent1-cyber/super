@@ -2,15 +2,31 @@
 
 A 3D open-world flying superhero browser game.
 
-Built with Three.js (WebGPU + WebGL2 fallback) + Vite + Rapier physics.
+**▶ Play live: https://macaiagent1-cyber.github.io/super/?slice=S1B&seed=42**
 
-## Run
+Built with Three.js (WebGPU + WebGL2 fallback) + Vite + Rapier physics + Howler audio.
+
+## Run locally
 
 ```bash
 npm install
 npm run dev        # http://127.0.0.1:5173/?slice=S1A  (vertical slice)
 npm run dev:slice  # http://127.0.0.1:5174/?slice=S1B  (full city + combat)
-npm test
+npm test           # unit tests (Vitest)
+npm run test:smoke # Playwright smoke tests
+```
+
+## Deploy
+
+The repo ships a GitHub Actions workflow (`.github/workflows/deploy.yml`) that
+builds + publishes to GitHub Pages on every push to `main`/`master`. Vite's
+`base` is configurable via the `SUPER_BASE_PATH` env var so the same build
+works on root-served hosts (Vercel/Netlify/Cloudflare Pages) and path-served
+hosts (GitHub Pages: `/<repo>/`). For a one-off Vercel deploy:
+
+```bash
+npm run build
+npx vercel --prod dist
 ```
 
 ## Controls
