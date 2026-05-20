@@ -37,7 +37,7 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.AgXToneMapping;
-  renderer.toneMappingExposure = 0.7;  // tuned: HDRI ambient is bright; 1.0 blows out
+  renderer.toneMappingExposure = 0.55;  // tuned harder: HDRI ambient is hot, buildings hit pure-white at 0.7
 
   const scene = new THREE.Scene();
   await applyHdriEnvironment({ renderer, scene, backendLabel: backend.label });
@@ -152,9 +152,9 @@ async function applyHdriEnvironment({ renderer, scene, backendLabel }) {
   const envMap = pmremGenerator.fromEquirectangular(texture).texture;
 
   scene.environment = envMap;
-  scene.environmentIntensity = 0.55;       // tuned: PMREM ambient is hot, dial back
+  scene.environmentIntensity = 0.32;       // PMREM ambient dialed way back so building albedo reads
   scene.background = texture;               // use ORIGINAL HDRI for sharp sky (PMREM is blurry)
-  scene.backgroundIntensity = 0.7;          // tone background down too so it doesn't crush horizon
+  scene.backgroundIntensity = 0.6;          // tone background down too so it doesn't crush horizon
 
   // Tinted fog — push the start back so close buildings stay readable
   const fogColor = sampleHdriAmbient(texture);
