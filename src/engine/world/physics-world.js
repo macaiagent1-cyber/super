@@ -27,7 +27,24 @@ async function initRapier() {
   initPromise = (async () => {
     const module = await import('@dimforge/rapier3d-simd-compat');
     const RAPIER = module.default ?? module;
-    await RAPIER.init();
+    // Rapier 0.19.3's compat init() passes a Uint8Array of WASM bytes to the
+    // internal wbg loader, which then warns "deprecated parameters... pass a
+    // single object instead". We can't influence the internal call from here
+    // (it's their wrapper, not ours). Suppress only that exact message during
+    // init so it doesn't pollute the console; restore after.
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      const first = args[0];
+      if (typeof first === 'string' && first.includes('deprecated parameters for the initialization function')) {
+        return;
+      }
+      originalWarn.apply(console, args);
+    };
+    try {
+      await RAPIER.init();
+    } finally {
+      console.warn = originalWarn;
+    }
     return RAPIER;
   })();
   return initPromise;

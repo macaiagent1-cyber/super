@@ -40,7 +40,12 @@ export function createAudioBus() {
   }
 
   function getOutputNode(c) {
-    return Howler?.masterGain ?? c.destination;
+    // Only route through Howler's masterGain if it lives on the SAME context
+    // as our procedural nodes. Otherwise (Howler initialized later, on its own
+    // context), Web Audio throws InvalidAccessError on connect(). Fall back to
+    // our context's destination — slightly less unified mixing but safe.
+    if (Howler?.masterGain && Howler.ctx === c) return Howler.masterGain;
+    return c.destination;
   }
 
   function playTone({
