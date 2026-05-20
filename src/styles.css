@@ -26,7 +26,33 @@ body {
   top: 12px;
   left: 12px;
   z-index: 10;
+  white-space: pre;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(5, 12, 24, 0.72);
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: #f4f7fb;
   pointer-events: none;
+}
+
+#console-root {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 11;
+  width: min(460px, calc(100vw - 24px));
+  display: grid;
+  gap: 6px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+#console-root input,
+#console-root output {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(5, 12, 24, 0.78);
+  color: #f4f7fb;
+  padding: 8px 10px;
 }
