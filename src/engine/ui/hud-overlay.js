@@ -1,3 +1,5 @@
+import { mountStyle } from './style-loader.js';
+
 /**
  * DOM-based HUD: health bar, energy bar, minimap canvas, reticle.
  * Updated each frame from S1B render loop.
@@ -43,9 +45,8 @@ export function createHudOverlay({ root }) {
 
   root.append(container, reticle);
 
-  // Styles
-  const style = document.createElement('style');
-  style.textContent = `
+  // (mountStyle imported above)
+  mountStyle('super-hud-style', `
     .hud-container { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 10px; z-index: 100; pointer-events: none; }
     .hud-bar { width: 220px; height: 18px; border-radius: 5px; background: rgba(5,12,24,0.65); border: 1px solid rgba(255,255,255,0.18); position: relative; overflow: hidden; }
     .hud-bar-label { position: absolute; top: 1px; left: 8px; right: 8px; font: 11px ui-monospace, monospace; color: rgba(255,255,255,0.85); z-index: 2; }
@@ -53,8 +54,7 @@ export function createHudOverlay({ root }) {
     .hud-bar-energy .hud-bar-fill { background: linear-gradient(90deg, #4af5ff 0%, #80ddff 100%); }
     .hud-minimap { width: 160px; height: 160px; border-radius: 8px; background: rgba(5,12,24,0.7); border: 1px solid rgba(255,255,255,0.18); overflow: hidden; }
     .hud-reticle { position: fixed; left: 50%; top: 50%; width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; border: 1.5px solid rgba(255,255,255,0.7); border-radius: 50%; pointer-events: none; box-shadow: 0 0 8px rgba(0,0,0,0.6); z-index: 99; }
-  `;
-  document.head.appendChild(style);
+  `);
 
   return {
     update({ hp, hpMax, energy, energyMax, heroPos, threats, cars }) {

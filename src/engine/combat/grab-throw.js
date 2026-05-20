@@ -11,6 +11,20 @@ export function createGrabSystem({ physicsWorld, eventBus = null } = {}) {
   let grabbed = null;
   let attachOffset = { ...ATTACH_OFFSET };
 
+  // CRITICAL: when a grabbed body is destroyed (e.g., heat-vision on a held
+  // car), Rapier's `removeBody` invalidates the wasm-side body. Calling
+  // setNextKinematicTranslation on a removed body is undefined behavior in
+  // the wasm bindings — it can crash the module or silently write garbage.
+  // We listen for combat.destroyed and clear `grabbed` if the handle matches
+  // so the next update() doesn't touch a dead body.
+  eventBus?.on?.('combat.destroyed', payload => {
+    if (!grabbed) return;
+    const grabbedHandle = grabbed.entry?.body?.handle;
+    if (grabbedHandle != null && payload?.bodyHandle === grabbedHandle) {
+      grabbed = null;
+    }
+  });
+
   function tryGrab(heroState) {
     if (grabbed || !physicsWorld) return false;
 
@@ -64,10 +78,23 @@ export function createGrabSystem({ physicsWorld, eventBus = null } = {}) {
 
     if (!grabbed) return;
 
+    // Defense in depth: re-check the body is still registered in the physics
+    // world before touching it. Even with the combat.destroyed listener
+    // above, an out-of-order event or a non-event-mediated removeBody would
+    // leave a dangling reference. Verify and self-heal.
+    const stillAlive = physicsWorld.bodies?.has?.(grabbed.entry.body.handle);
+    if (!stillAlive) {
+      grabbed = null;
+      return;
+    }
+
     const forward = getForward(heroState);
+    // Use FULL 3D forward (including Y) so the held body tracks the hero's
+    // pitch during climbs and dives. Previously we only used forward.x/.z
+    // which made cars lag vertically when the hero pitched up or down.
     const target = {
       x: heroState.position.x + forward.x * attachOffset.z,
-      y: heroState.position.y + attachOffset.y,
+      y: heroState.position.y + forward.y * attachOffset.z + attachOffset.y,
       z: heroState.position.z + forward.z * attachOffset.z,
     };
     grabbed.entry.body.setNextKinematicTranslation(target);

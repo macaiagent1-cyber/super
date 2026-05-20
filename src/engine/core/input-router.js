@@ -6,6 +6,20 @@ function pollGamepad() {
   return null;
 }
 
+// Only swallow keys the game actually consumes. Blanket `preventDefault()`
+// breaks devtools (F12, Cmd+Opt+I), reload (Cmd+R, F5), tab focus, and any
+// browser shortcut while the page has focus — including when NOT pointer-
+// locked. With this whitelist, modifier-key combos (Cmd/Ctrl/Alt) always
+// pass through to the browser regardless.
+const CONSUMED_KEYS = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'KeyQ', 'KeyE', 'KeyR', 'KeyF',
+  'Space',
+  'ShiftLeft', 'ShiftRight',
+  'Escape', 'Backquote',
+  'Tab',
+]);
+
 export function createInputRouter() {
   return {
     _keys: {},
@@ -40,7 +54,9 @@ export function createInputRouter() {
     handleKeyDown(event) {
       if (!this._keys[event.code]) this._pressedBuffer[event.code] = true;
       this._keys[event.code] = true;
-      event.preventDefault?.();
+      if (CONSUMED_KEYS.has(event.code) && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault?.();
+      }
     },
 
     handleKeyUp(event) {

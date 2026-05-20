@@ -28,13 +28,14 @@ export function createAudioBus() {
         ctx = new AudioContextCtor();
       }
       Howler.autoUnlock = true;
-      // Hard mute master output by default. The pause-menu music slider can
-      // still raise the per-Howl volume to make music audible, but procedural
-      // SFX (boost whoosh, punch, dodge, etc.) route through this masterGain
-      // and stay silent unless the user explicitly enables audio.
-      Howler.volume(0);
       initialized = true;
       ctx.resume?.();
+      // Default-mute via the music-volume slider (see save-store DEFAULTS).
+      // We do NOT pin Howler.masterGain here because (a) the slider can't
+      // lift it back up — only setMusicVolume() does that — and (b) it would
+      // silence procedural SFX permanently. With DEFAULTS.musicVolume=0 and
+      // setMusicVolume() chained to the master gain (below), the user can
+      // turn audio on via the pause-menu slider if they ever want it.
     } catch (error) {
       if (!warned) {
         console.warn('[audio] AudioContext unavailable', error);
@@ -130,6 +131,13 @@ export function createAudioBus() {
     musicVolume = Math.max(0, Math.min(1, value));
     musicHowl?.volume(musicVolume);
     if (musicNodes?.gain) musicNodes.gain.gain.value = musicVolume * 0.06;
+    // Bridge the slider to Howler's master output so procedural SFX (boost
+    // whoosh, punch, dodge, etc.) follow the same control. Otherwise a user
+    // dragging the slider would only affect the music Howl, leaving SFX
+    // either always-silent or always-loud depending on init state.
+    if (typeof Howler?.volume === 'function') {
+      Howler.volume(musicVolume);
+    }
   }
 
   function stopMusic() {

@@ -94,9 +94,16 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
       renderer.render(scene, camera);
     },
     getStats() {
+      // WebGPU's `info.render.calls` is CUMULATIVE since app start; only
+      // `info.render.frameCalls` is per-frame. WebGL2's `info.render.calls`
+      // IS per-frame (autoReset). Prefer frameCalls when available so the
+      // HUD reports a meaningful number on both backends. The runtime audit
+      // caught this — earlier the HUD reported "Draws 21,182" which was
+      // actually 21k draws *since page load*, not per-frame.
       const info = renderer.info;
+      const calls = info.render.frameCalls ?? info.render.calls;
       return {
-        calls: info.render.calls,
+        calls,
         triangles: info.render.triangles,
         backendLabel: backend.label,
       };

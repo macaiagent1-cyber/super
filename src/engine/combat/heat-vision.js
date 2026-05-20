@@ -101,7 +101,19 @@ export function createHeatVisionSystem({ scene, physicsWorld, eventBus = null })
           const d = decalPool[decalIndex];
           decalIndex = (decalIndex + 1) % decalPool.length;
           d.position.set(hit.point.x, hit.point.y, hit.point.z);
-          d.lookAt(origin.x, origin.y, origin.z);
+          // Orient the decal plane to face AWAY from the surface (toward the
+          // beam origin). Previously lookAt(origin) faced the decal toward
+          // the hero, which produced thin-ellipse artifacts on rooftops and
+          // other surfaces not perpendicular to the beam. Aligning to the
+          // beam direction is a close approximation of the surface normal
+          // for primary-ray hits; a true normal-aligned decal would require
+          // adding `normal` to the raycast return value (TODO).
+          const back = {
+            x: hit.point.x - forward.x * 0.01,
+            y: hit.point.y - forward.y * 0.01,
+            z: hit.point.z - forward.z * 0.01,
+          };
+          d.lookAt(back.x, back.y, back.z);
           d.visible = true;
         }
 
@@ -120,6 +132,22 @@ export function createHeatVisionSystem({ scene, physicsWorld, eventBus = null })
         );
         glow.scale.setScalar(0.001);
       }
+    },
+    /**
+     * Free all GPU resources owned by this system. Called on slice teardown.
+     * Three.js never garbage-collects BufferGeometry or Material — they sit
+     * on the GPU until explicitly disposed.
+     */
+    dispose() {
+      scene.remove(beam, glow);
+      for (const d of decalPool) scene.remove(d);
+      beamGeometry.dispose();
+      beamMaterial.dispose();
+      glow.geometry.dispose();
+      glowMat.dispose();
+      decalGeo.dispose();
+      decalMat.dispose();
+      decalPool.length = 0;
     },
   };
 }

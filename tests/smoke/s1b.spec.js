@@ -50,10 +50,19 @@ test('S1B boots 3x3 city on default backend without console errors', async ({ pa
 });
 
 test('S1B forced WebGL2 stays above low-tier smoke budget', async ({ page }) => {
+  const errors = [];
+  page.on('console', msg => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
   await page.goto('/?slice=S1B&seed=42&forceWebGL2=1');
   await clickTitlePlay(page);
   await expect(page.locator('#hud-root')).toContainText('webgl2-low', { timeout: 8000 });
   await page.waitForTimeout(2500);
   const software = await isHeadlessSoftwareGpu(page);
   await expectFpsAtLeast(page, software ? 15 : 30);
+  // Filter out the pointer-lock error — it's a Playwright-iframe artifact,
+  // not a real bug. Real pointer-lock failures in production would surface
+  // differently.
+  const realErrors = errors.filter(e => !/pointer lock/i.test(e));
+  expect(realErrors).toEqual([]);
 });

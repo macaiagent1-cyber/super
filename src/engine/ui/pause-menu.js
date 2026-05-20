@@ -1,3 +1,5 @@
+import { mountStyle } from './style-loader.js';
+
 /**
  * DOM-based pause menu. Triggered by Escape key.
  * Provides: Resume, Settings (quality, mouse sensitivity, music volume), New Game (re-seed).
@@ -68,8 +70,7 @@ export function createPauseMenu({
   overlay.append(panel);
   root.append(overlay);
 
-  const style = document.createElement('style');
-  style.textContent = `
+  mountStyle('super-pause-style', `
     .pause-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(5,12,24,0.78); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; }
     .pause-panel { width: min(420px, 90vw); padding: 28px 32px; background: rgba(15,22,34,0.92); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; color: #f4f7fb; font-family: ui-sans-serif, system-ui, sans-serif; }
     .pause-title { margin: 0; font-size: 3rem; letter-spacing: 0.04em; background: linear-gradient(135deg, #6fc3ff 0%, #a06bff 50%, #ff5ea8 100%); -webkit-background-clip: text; background-clip: text; color: transparent; text-align: center; }
@@ -85,8 +86,7 @@ export function createPauseMenu({
     .pause-btn { padding: 10px 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.22); border-radius: 6px; color: #f4f7fb; font: 0.95rem ui-sans-serif, sans-serif; cursor: pointer; }
     .pause-btn:hover { background: rgba(255,255,255,0.14); }
     .pause-btn-primary { background: linear-gradient(135deg, #4af, #a06bff); border-color: rgba(160,107,255,0.5); }
-  `;
-  document.head.appendChild(style);
+  `);
 
   return {
     show() {

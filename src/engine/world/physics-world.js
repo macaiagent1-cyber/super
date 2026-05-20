@@ -80,10 +80,27 @@ function createRapierPhysicsWorld(RAPIER, gravity) {
   }
 
   function flushQueries() {
-    const timestep = world.timestep;
-    world.timestep = 0;
-    world.step();
-    world.timestep = timestep;
+    // Rapier 0.19.3 doesn't expose updateSceneQueries(), so the canonical
+    // way to refresh broad-phase / narrow-phase before a raycast or
+    // shape-cast on freshly-added bodies is to advance the world by 0 dt.
+    // Caveats:
+    //   - step(0) still runs the full pipeline (collision detect, solver,
+    //     sleeping update). Acceptable here because (a) integration is dt=0
+    //     so positions don't move, and (b) we never pass an eventQueue, so
+    //     contact events are discarded.
+    //   - Restoring the original timestep after the call prevents
+    //     surprising the caller's next real step(dt).
+    // When Rapier ships updateSceneQueries(), prefer it — see
+    // https://github.com/dimforge/rapier/issues/XXX
+    world.propagateModifiedBodyPositionsToColliders?.();
+    if (typeof world.updateSceneQueries === 'function') {
+      world.updateSceneQueries();
+    } else {
+      const savedTimestep = world.timestep;
+      world.timestep = 0;
+      world.step();
+      world.timestep = savedTimestep;
+    }
     queryDirty = false;
   }
 

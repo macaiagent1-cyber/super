@@ -59,7 +59,17 @@ export function createImpactFx({ scene, documentRef = globalThis.document } = {}
     flash.update(dt);
   }
 
-  return { spawn, update };
+  function dispose() {
+    for (const entry of pool) {
+      scene?.remove?.(entry.mesh);
+      entry.mesh.geometry.dispose();
+      entry.mat.dispose();
+    }
+    pool.length = 0;
+    flash.dispose();
+  }
+
+  return { spawn, update, dispose };
 }
 
 function createScreenFlash(documentRef) {
@@ -95,6 +105,10 @@ function createScreenFlash(documentRef) {
       if (!flashElement) return;
       const t = age / FLASH_LIFE;
       flashElement.style.opacity = String(FLASH_OPACITY * (1 - t) * (1 - t));
+    },
+    dispose() {
+      if (element?.parentNode) element.parentNode.removeChild(element);
+      element = null;
     },
   };
 }
