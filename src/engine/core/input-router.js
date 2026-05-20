@@ -107,6 +107,7 @@ export function createInputRouter() {
         lookX: this.mouseDeltaX,
         lookY: this.mouseDeltaY,
         punch: this._mousePressedFrame.has(0),
+        heatVision: this.isDown('KeyE'),
       };
     },
   };

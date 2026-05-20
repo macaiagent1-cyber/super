@@ -3,6 +3,7 @@ import { RENDER } from '../engine/core/constants.js';
 import { createEngineLoop } from '../engine/core/engine-loop.js';
 import { eventBus } from '../engine/core/event-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
+import { createHeatVisionSystem } from '../engine/combat/heat-vision.js';
 import { tryPunch } from '../engine/combat/punch-system.js';
 import { createDevConsole, attachDevConsole } from '../engine/dev-tools/dev-console.js';
 import { createPerfHud } from '../engine/dev-tools/perf-hud.js';
@@ -40,6 +41,12 @@ export async function startS1B() {
   const collisionWorld = createCollisionWorld();
   collisionWorld.addBuildings(district.buildings);
 
+  const heatVision = createHeatVisionSystem({
+    scene: renderSystem.scene,
+    physicsWorld,
+    eventBus,
+  });
+
   const input = createInputRouter();
   input.attach(canvas);
   const hero = createHeroSystem({ scene: renderSystem.scene, csm: renderSystem.csm, physicsWorld });
@@ -76,6 +83,7 @@ export async function startS1B() {
       const intent = input.getFlightIntent();
       hero.update(intent, dt, collisionWorld);
       physicsWorld.step(dt);
+      heatVision.update(hero.state, intent, dt);
       if (intent.punch) {
         tryPunch({
           origin: hero.state.position,
