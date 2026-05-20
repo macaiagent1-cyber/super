@@ -1,8 +1,10 @@
+import * as THREE from 'three';
 import { createClock } from '../engine/core/clock.js';
 import { RENDER } from '../engine/core/constants.js';
 import { createEngineLoop } from '../engine/core/engine-loop.js';
 import { eventBus } from '../engine/core/event-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
+import { createGrabSystem } from '../engine/combat/grab-throw.js';
 import { createHeatVisionSystem } from '../engine/combat/heat-vision.js';
 import { tryPunch } from '../engine/combat/punch-system.js';
 import { createDevConsole, attachDevConsole } from '../engine/dev-tools/dev-console.js';
@@ -28,6 +30,7 @@ export async function startS1B() {
 
   const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
   const physicsWorld = await createPhysicsWorld();
+  const cars = [];
   for (const b of district.buildings) {
     const halfX = b.size.x / 2;
     const halfZ = b.size.z / 2;
@@ -36,6 +39,35 @@ export async function startS1B() {
       { x: b.position.x + halfX, y: b.size.y, z: b.position.z + halfZ },
       'building'
     );
+  }
+  physicsWorld.createStaticBox(
+    { x: -450, y: -1, z: -450 },
+    { x: 450, y: 0, z: 450 },
+    'ground'
+  );
+  for (let i = 0; i < 6; i += 1) {
+    const x = Math.sin(i * 1.3) * 60;
+    const z = Math.cos(i * 1.3) * 60;
+    const carBody = physicsWorld.createDynamicBox({
+      position: { x, y: 1.2, z },
+      halfExtents: { x: 1.1, y: 0.6, z: 2.3 },
+      mass: 1200,
+      tag: 'car',
+    });
+    const carMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 1.2, 4.6),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL((i * 0.18) % 1, 0.55, 0.5),
+        roughness: 0.5,
+        metalness: 0.3,
+      })
+    );
+    if (renderSystem.csm) renderSystem.csm.setupMaterial(carMesh.material);
+    carMesh.position.set(x, 1.2, z);
+    carMesh.castShadow = true;
+    carMesh.receiveShadow = true;
+    renderSystem.scene.add(carMesh);
+    cars.push({ body: carBody.body, mesh: carMesh });
   }
 
   const collisionWorld = createCollisionWorld();
@@ -46,6 +78,7 @@ export async function startS1B() {
     physicsWorld,
     eventBus,
   });
+  const grabSystem = createGrabSystem({ physicsWorld, eventBus });
 
   const input = createInputRouter();
   input.attach(canvas);
@@ -82,6 +115,7 @@ export async function startS1B() {
     update(dt) {
       const intent = input.getFlightIntent();
       hero.update(intent, dt, collisionWorld);
+      grabSystem.update(hero.state, intent, dt);
       physicsWorld.step(dt);
       heatVision.update(hero.state, intent, dt);
       if (intent.punch) {
@@ -96,6 +130,12 @@ export async function startS1B() {
       }
     },
     render(timing) {
+      for (const car of cars) {
+        const t = car.body.translation();
+        const r = car.body.rotation?.() ?? { x: 0, y: 0, z: 0, w: 1 };
+        car.mesh.position.set(t.x, t.y, t.z);
+        car.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+      }
       const pose = computeCameraRig({ hero: hero.state, previous: cameraMemory, dt: timing.dt || RENDER.fixedStep });
       Object.assign(cameraMemory, pose.position);
       updateThreeCamera(renderSystem.camera, pose);
