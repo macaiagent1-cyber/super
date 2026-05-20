@@ -61,3 +61,14 @@ export function getStream(name, seed) {
   const subSeed = (nameHash ^ ((seed | 0) >>> 0)) >>> 0;
   return makeStream(subSeed);
 }
+
+// FNV-1a hash of a string combined with a base seed.
+// Already present internally as `fnv1a` but exposed here as a named helper.
+export function hashSeed(name, baseSeed) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h ^ ((baseSeed | 0) >>> 0)) >>> 0;
+}
