@@ -5,6 +5,7 @@ import { createEngineLoop } from '../engine/core/engine-loop.js';
 import { eventBus } from '../engine/core/event-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
 import { createDodgeSystem } from '../engine/combat/dodge-system.js';
+import { createDestructibleSystem } from '../engine/combat/destructibles.js';
 import { createGrabSystem } from '../engine/combat/grab-throw.js';
 import { createHeatVisionSystem } from '../engine/combat/heat-vision.js';
 import { tryPunch } from '../engine/combat/punch-system.js';
@@ -33,6 +34,8 @@ export async function startS1B() {
   const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
   const physicsWorld = await createPhysicsWorld();
   const cars = [];
+  const destructibles = createDestructibleSystem({ eventBus });
+  const carDamageColor = new THREE.Color(0x222222);
   for (const b of district.buildings) {
     const halfX = b.size.x / 2;
     const halfZ = b.size.z / 2;
@@ -62,14 +65,18 @@ export async function startS1B() {
         color: new THREE.Color().setHSL((i * 0.18) % 1, 0.55, 0.5),
         roughness: 0.5,
         metalness: 0.3,
+        transparent: true,
+        opacity: 1,
       })
     );
+    const originalColor = carMesh.material.color.getHex();
     if (renderSystem.csm) renderSystem.csm.setupMaterial(carMesh.material);
     carMesh.position.set(x, 1.2, z);
     carMesh.castShadow = true;
     carMesh.receiveShadow = true;
     renderSystem.scene.add(carMesh);
-    cars.push({ body: carBody.body, mesh: carMesh });
+    destructibles.register(carBody.body.handle, { hp: 150, armor: 8, tag: 'car' });
+    cars.push({ body: carBody.body, mesh: carMesh, originalColor, sinkOffset: 0 });
   }
 
   const collisionWorld = createCollisionWorld();
@@ -83,6 +90,11 @@ export async function startS1B() {
   const grabSystem = createGrabSystem({ physicsWorld, eventBus });
   const dodge = createDodgeSystem({ eventBus });
   const impactFx = createImpactFx({ scene: renderSystem.scene });
+  eventBus.on('combat.heatHit', hit => {
+    if (hit.tag === 'car' && hit.bodyHandle !== undefined) {
+      destructibles.damage(hit.bodyHandle, 30 * hit.dt);
+    }
+  });
 
   const input = createInputRouter();
   input.attach(canvas);
@@ -139,6 +151,9 @@ export async function startS1B() {
             position: result.point,
             normal: { x: -fwd.x, y: -fwd.y, z: -fwd.z },
           });
+          if (result.bodyHandle !== undefined) {
+            destructibles.damage(result.bodyHandle, 45);
+          }
         }
       }
     },
@@ -148,6 +163,21 @@ export async function startS1B() {
         const r = car.body.rotation?.() ?? { x: 0, y: 0, z: 0, w: 1 };
         car.mesh.position.set(t.x, t.y, t.z);
         car.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+        const state = destructibles.get(car.body.handle);
+        if (state) {
+          const hpRatio = state.maxHp > 0 ? state.hp / state.maxHp : 0;
+          const damageT = THREE.MathUtils.clamp(1 - hpRatio, 0, 1);
+          car.mesh.material.color.lerpColors(
+            new THREE.Color(car.originalColor),
+            carDamageColor,
+            damageT,
+          );
+          car.mesh.material.opacity = state.dead ? 0.45 : 1 - damageT * 0.2;
+          if (state.dead && car.mesh.position.y > -8) {
+            car.sinkOffset = Math.min(car.sinkOffset + (timing.dt || RENDER.fixedStep), 10);
+            car.mesh.position.y -= car.sinkOffset;
+          }
+        }
       }
       const pose = computeCameraRig({ hero: hero.state, previous: cameraMemory, dt: timing.dt || RENDER.fixedStep });
       Object.assign(cameraMemory, pose.position);

@@ -105,7 +105,13 @@ export function createHeatVisionSystem({ scene, physicsWorld, eventBus = null })
           d.visible = true;
         }
 
-        eventBus?.emit?.('combat.heatHit', { distance, point: hit.point, tag: hit.tag });
+        eventBus?.emit?.('combat.heatHit', {
+          distance,
+          point: hit.point,
+          tag: hit.tag,
+          bodyHandle: hit.bodyHandle,
+          dt,
+        });
       } else {
         glow.position.set(
           origin.x + forward.x * maxRange,
