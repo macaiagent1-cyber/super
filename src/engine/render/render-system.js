@@ -1,58 +1,78 @@
 import * as THREE from 'three';
-import { WebGPURenderer } from 'three/webgpu';
-import { logger } from '../core/logger.js';
-import { sceneRoots } from './scene-roots.js';
-import { APP_CONFIG } from '../core/app-config.js';
-import { cameraRig } from './camera-rig.js';
+import { RENDER } from '../core/constants.js';
+import { createWebGPUBackend } from './webgpu-backend.js';
+import { createWebGL2Backend } from './webgl2-backend.js';
 
-class RenderSystem {
-  constructor() {
-    this.renderer = null;
-    this.camera = null;
-    this.canvas = null;
-  }
-
-  async init() {
-    logger.info('render', 'Initializing RenderSystem');
-
-    this.renderer = new WebGPURenderer({ antialias: true, alpha: false });
-    
-    await this.renderer.init();
-    
-    this.canvas = this.renderer.domElement;
-    document.body.appendChild(this.canvas);
-
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
-    
-    this.handleResize();
-    window.addEventListener('resize', () => this.handleResize());
-
-    // Basic setup
-    this.renderer.setClearColor(0x87ceeb); // Sky blue
-    
-    // Add a light
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(100, 200, 100);
-    sceneRoots.world.add(sun);
-    
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-    sceneRoots.world.add(ambient);
-
-    logger.info('render', `Renderer initialized. Backend: ${this.renderer.backendType}`);
-  }
-
-  handleResize() {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    this.renderer.setSize(width, height);
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-  }
-
-  render(dt, alpha) {
-    cameraRig.update(dt);
-    this.renderer.render(sceneRoots.world, this.camera);
-  }
+export function chooseRenderBackend({ forceWebGL2, hasWebGPU }) {
+  return forceWebGL2 || !hasWebGPU ? 'webgl2' : 'webgpu';
 }
 
-export const renderSystem = new RenderSystem();
+export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
+  const desired = chooseRenderBackend({ forceWebGL2, hasWebGPU: !!navigator.gpu });
+  let backend;
+
+  if (desired === 'webgpu') {
+    try {
+      backend = await createWebGPUBackend({ canvas });
+    } catch (error) {
+      console.warn('[render] WebGPU failed, falling back to WebGL2', error);
+      backend = await createWebGL2Backend({ canvas });
+    }
+  } else {
+    backend = await createWebGL2Backend({ canvas });
+  }
+
+  const renderer = backend.renderer;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.AgXToneMapping;
+  renderer.toneMappingExposure = 1;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x8fc7ff);
+  scene.fog = new THREE.Fog(0x8fc7ff, 240, 680);
+
+  const camera = new THREE.PerspectiveCamera(RENDER.cameraFov, 1, 0.1, 1200);
+  camera.position.set(0, 18, 36);
+
+  const sun = new THREE.DirectionalLight(0xffffff, 3.5);
+  sun.position.set(90, 140, 80);
+  scene.add(sun);
+  scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3b4658, 1.4));
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(900, 900),
+    new THREE.MeshStandardMaterial({ color: 0x394658, roughness: 0.95, metalness: 0 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  function resize() {
+    const width = canvas.clientWidth || window.innerWidth;
+    const height = canvas.clientHeight || window.innerHeight;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+
+  return {
+    backendLabel: backend.label,
+    renderer,
+    scene,
+    camera,
+    getAdapterInfo: backend.getAdapterInfo,
+    resize,
+    render() {
+      renderer.render(scene, camera);
+    },
+    getStats() {
+      const info = renderer.info;
+      return {
+        calls: info.render.calls,
+        triangles: info.render.triangles,
+        backendLabel: backend.label,
+      };
+    },
+  };
+}
