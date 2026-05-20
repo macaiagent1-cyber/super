@@ -9,6 +9,7 @@ export function createAudioBus() {
   let ctx = null;
   let initialized = false;
   let warned = false;
+  let musicNodes = null;
 
   function ensureContext() {
     if (initialized && ctx) {
@@ -84,8 +85,51 @@ export function createAudioBus() {
     osc.stop(t + duration);
   }
 
+  function startMusic() {
+    const c = ensureContext();
+    if (!c) return;
+
+    if (musicNodes) stopMusic();
+    musicNodes = { oscs: [], gain: null };
+
+    const masterGain = c.createGain();
+    masterGain.gain.value = 0.06;
+    masterGain.connect(c.destination);
+    musicNodes.gain = masterGain;
+
+    const baseFreq = 110;
+    const freqs = [baseFreq, baseFreq * 1.5, baseFreq * 2];
+    for (const f of freqs) {
+      const osc = c.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = f;
+
+      const lfoG = c.createGain();
+      lfoG.gain.value = 1.5;
+
+      const lfo = c.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.1 + Math.random() * 0.3;
+      lfo.connect(lfoG).connect(osc.frequency);
+
+      osc.connect(masterGain);
+      osc.start();
+      lfo.start();
+      musicNodes.oscs.push(osc, lfo);
+    }
+  }
+
+  function stopMusic() {
+    if (!musicNodes) return;
+    for (const o of musicNodes.oscs) o.stop();
+    musicNodes.gain?.disconnect();
+    musicNodes = null;
+  }
+
   return {
     ensureContext,
+    startMusic,
+    stopMusic,
     boostWhoosh() {
       playTone({ frequency: 380, duration: 0.5, type: 'sawtooth', volume: 0.25 });
     },

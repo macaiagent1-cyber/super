@@ -42,7 +42,10 @@ export async function startS1B() {
   });
   const traffic = createTrafficSystem({ scene: renderSystem.scene, count: 8, csm: renderSystem.csm });
   const audioBus = createAudioBus();
-  canvas.addEventListener('click', () => audioBus.ensureContext(), { once: true });
+  canvas.addEventListener('click', () => {
+    audioBus.ensureContext();
+    audioBus.startMusic();
+  }, { once: true });
 
   const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
   const physicsWorld = await createPhysicsWorld();
