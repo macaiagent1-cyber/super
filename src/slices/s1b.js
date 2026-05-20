@@ -3,6 +3,9 @@ import { createClock } from '../engine/core/clock.js';
 import { RENDER } from '../engine/core/constants.js';
 import { createEngineLoop } from '../engine/core/engine-loop.js';
 import { eventBus } from '../engine/core/event-bus.js';
+import { createCivilianSystem } from '../engine/ai/civilian-ai.js';
+import { createTrafficSystem } from '../engine/ai/traffic-ai.js';
+import { createAudioBus } from '../engine/audio/audio-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
 import { createDodgeSystem } from '../engine/combat/dodge-system.js';
 import { createDestructibleSystem } from '../engine/combat/destructibles.js';
@@ -30,6 +33,15 @@ export async function startS1B() {
   const district = generateDistrict({ seed });
   addBatchedBuildings(renderSystem.scene, district.buildings, renderSystem.csm);
   addRoadMeshes(renderSystem.scene, district.roads, renderSystem.csm);
+  const civilians = createCivilianSystem({
+    scene: renderSystem.scene,
+    seed,
+    count: 24,
+    csm: renderSystem.csm,
+  });
+  const traffic = createTrafficSystem({ scene: renderSystem.scene, count: 8, csm: renderSystem.csm });
+  const audioBus = createAudioBus();
+  canvas.addEventListener('click', () => audioBus.ensureContext(), { once: true });
 
   const { createPhysicsWorld } = await import('../engine/world/physics-world.js');
   const physicsWorld = await createPhysicsWorld();
@@ -90,6 +102,10 @@ export async function startS1B() {
   const grabSystem = createGrabSystem({ physicsWorld, eventBus });
   const dodge = createDodgeSystem({ eventBus });
   const impactFx = createImpactFx({ scene: renderSystem.scene });
+  eventBus.on('combat.dodge', () => audioBus.dodgeWhoosh());
+  eventBus.on('combat.destroyed', event => {
+    if (event?.tag === 'car') audioBus.carImpact();
+  });
   eventBus.on('combat.heatHit', hit => {
     if (hit.tag === 'car' && hit.bodyHandle !== undefined) {
       destructibles.damage(hit.bodyHandle, 30 * hit.dt);
@@ -104,6 +120,7 @@ export async function startS1B() {
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });
   const clock = createClock({ fixedStep: RENDER.fixedStep, maxDelta: RENDER.maxDelta });
   const cameraMemory = { x: 0, y: 38, z: 145 };
+  let wasBoosting = false;
 
   const { consoleRoot, inputEl, outputEl } = buildConsoleDom();
   document.body.append(consoleRoot);
@@ -130,11 +147,15 @@ export async function startS1B() {
     resize: renderSystem.resize,
     update(dt) {
       const intent = input.getFlightIntent();
+      if (intent.boost && !wasBoosting) audioBus.boostWhoosh();
+      wasBoosting = intent.boost;
       dodge.update(hero.state, intent, dt);
       hero.update(intent, dt, collisionWorld);
       grabSystem.update(hero.state, intent, dt);
       physicsWorld.step(dt);
       heatVision.update(hero.state, intent, dt);
+      civilians.update(dt, hero.state);
+      traffic.update(dt);
       impactFx.update(dt);
       if (intent.punch) {
         const fwd = getForwardVector(hero.state.yaw, hero.state.pitch);
@@ -151,6 +172,7 @@ export async function startS1B() {
             position: result.point,
             normal: { x: -fwd.x, y: -fwd.y, z: -fwd.z },
           });
+          audioBus.punchImpact();
           if (result.bodyHandle !== undefined) {
             destructibles.damage(result.bodyHandle, 45);
           }
