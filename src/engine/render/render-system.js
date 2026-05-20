@@ -37,7 +37,7 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.AgXToneMapping;
-  renderer.toneMappingExposure = 1;
+  renderer.toneMappingExposure = 0.7;  // tuned: HDRI ambient is bright; 1.0 blows out
 
   const scene = new THREE.Scene();
   await applyHdriEnvironment({ renderer, scene, backendLabel: backend.label });
@@ -114,8 +114,8 @@ function createCsm({ scene, camera, backendLabel }) {
       parent: scene,
       shadowMapSize: 1024,
       lightDirection: SUN_DIRECTION.clone(),
-      lightIntensity: 2.8,
-      lightColor: new THREE.Color(0xffffff),
+      lightIntensity: 1.8,  // tuned down: HDRI already provides ambient
+      lightColor: new THREE.Color(0xfff2dc),  // warm sunset tint
       camera,
     });
   } catch (error) {
@@ -125,7 +125,7 @@ function createCsm({ scene, camera, backendLabel }) {
 }
 
 function createFallbackSun(scene) {
-  const sun = new THREE.DirectionalLight(0xffffff, 2.8);
+  const sun = new THREE.DirectionalLight(0xfff2dc, 1.8);  // tuned down + warm sunset tint
   sun.castShadow = true;
   sun.position.copy(SUN_DIRECTION).multiplyScalar(-180);
   sun.shadow.mapSize.set(2048, 2048);
@@ -152,10 +152,16 @@ async function applyHdriEnvironment({ renderer, scene, backendLabel }) {
   const envMap = pmremGenerator.fromEquirectangular(texture).texture;
 
   scene.environment = envMap;
-  scene.background = envMap;
-  scene.fog = new THREE.Fog(sampleHdriAmbient(texture), 240, 680);
+  scene.environmentIntensity = 0.55;       // tuned: PMREM ambient is hot, dial back
+  scene.background = texture;               // use ORIGINAL HDRI for sharp sky (PMREM is blurry)
+  scene.backgroundIntensity = 0.7;          // tone background down too so it doesn't crush horizon
 
-  texture.dispose();
+  // Tinted fog — push the start back so close buildings stay readable
+  const fogColor = sampleHdriAmbient(texture);
+  fogColor.multiplyScalar(0.55);            // mute fog
+  scene.fog = new THREE.Fog(fogColor, 380, 850);
+
+  // Note: do NOT dispose `texture` — we're using it as background now.
   pmremGenerator.dispose();
 }
 
