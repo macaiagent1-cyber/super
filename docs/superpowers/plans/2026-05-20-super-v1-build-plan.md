@@ -2,9 +2,10 @@
 
 > **Single authoritative plan for shipping the full v1 of Super.** Replaces the [2026-05-19 execution playbook](2026-05-19-super-execution-playbook.md), which had a deprecated 18-hour deadline. **No timeline pressure.** Milestone gates over calendar dates.
 
-**Date:** 2026-05-20
+**Date:** 2026-05-20 (model selections updated same day — see §7.2, §7.3, §7.5)
 **Status:** **Awaiting your green-light to start M1.Task01**
 **Scope:** Full v1 per spec §16 — flight, combat, AI, audio, UI, save, all of it
+**Model policy (2026-05-20):** Most-capable cloud models everywhere. Codex `gpt-5.5` @ `xhigh` reasoning. Gemini `gemini-3.1-pro-preview`. Ollama cloud only (`kimi-k2.6:cloud`, `deepseek-v4-pro:cloud` as adversarial reviewers). **No local Ollama models.**
 **Predecessors:** Spec v0.2 ([`specs/2026-05-19-game-super-design.md`](../specs/2026-05-19-game-super-design.md)) · Strategic game plan ([`plans/2026-05-19-super-game-plan.md`](2026-05-19-super-game-plan.md)) · Codex M1 task list ([`plans/2026-05-19-super-m1.md`](2026-05-19-super-m1.md))
 **Supersedes:** Sprint execution playbook ([`plans/2026-05-19-super-execution-playbook.md`](2026-05-19-super-execution-playbook.md)) — time-boxed; you've removed the time box
 
@@ -298,14 +299,14 @@ All skills listed in this session's available-skills system reminder. The active
 | **Role in build** | Implements 80% of M1-M5 tasks (everything that's structured TDD) |
 | **Reasoning levels** | `low` (fast/shallow) / `medium` (default) / `high` (deep) / `xhigh` (deepest) |
 | **Service tiers** | default / `priority` ("/fast" — 1.5× speed, increased usage allowance) |
-| **Invocation** | `codex exec -c model_service_tier=priority -c model_reasoning_effort=high - < /tmp/prompt.md` (typically background) |
+| **Invocation** | `codex exec -c model_reasoning_effort=xhigh - < /tmp/prompt.md` (typically background) |
 | **Skill packs available** | Codex has its own skill packs in `~/.codex/skills/`: `claude-code-proper`, `gemini-cli-proper`, `mac-mini-screen-sharing`, `ollama-model-agents`, `ultrareview` |
 | **Cost profile** | Your OpenAI plan + Codex priority tier quota |
 
-**For Super, the right Codex settings:**
-- For M1-M5 task implementation: `service_tier=priority` + `reasoning_effort=high` (depth + speed)
-- For one-off quick tasks: `reasoning_effort=medium` (default)
-- For deep refactors / architectural choices: `reasoning_effort=xhigh` (no service tier override)
+**For Super, the right Codex settings (max capability per user direction, 2026-05-20):**
+- **Default for ALL M1-M5 tasks: `reasoning_effort=xhigh`** (deepest available; trade wall-clock for output quality)
+- For one-off speed-critical tasks (rare): `reasoning_effort=high` + `service_tier=priority` (the previous "/fast" recipe)
+- We do NOT drop below `high` reasoning anywhere in this build
 
 **Tools Codex has access to (when running):**
 - Full shell access in `super/` working directory
@@ -336,15 +337,17 @@ All skills listed in this session's available-skills system reminder. The active
 
 ---
 
-### 7.3 Gemini 3 Flash Preview — the fact-checker
+### 7.3 Gemini 3.1 Pro Preview — the fact-checker (UPGRADED 2026-05-20)
 
 | Attribute | Value |
 |---|---|
-| **What it is** | Google's Gemini 3 Flash Preview via the gemini CLI; aliased `--yolo` |
-| **Role in build** | Fact-check library claims, verify versions, web grounding when something feels wrong |
-| **Invocation** | `gemini -m gemini-3-flash-preview -y -p "..."` (often background) |
+| **What it is** | Google's Gemini 3.1 Pro Preview via the gemini CLI; aliased `--yolo`. This is your declared default in `~/.gemini/settings.json` and the most-capable Gemini 3 variant we have access to. |
+| **Role in build** | Fact-check library claims, verify versions, web grounding when something feels wrong, deep research with Google grounding |
+| **Invocation** | `gemini -m gemini-3.1-pro-preview -y -p "..."` (often background) |
+| **Why not Flash?** | User direction 2026-05-20: use most-capable models. Pro is deeper than Flash; the fact-check task benefits from Pro's reasoning depth (it would have likely caught the `three-wfc` hallucination Flash made). |
+| **Fallback** | `gemini-2.5-pro` (older, but reliable for deep research) |
 | **Skill packs available** | `~/.gemini/skills/ultrareview` |
-| **Cost profile** | Free tier (Google) or your Gemini plan |
+| **Cost profile** | Your Google Gemini plan (paid tier) |
 
 **Tools Gemini has access to (when running):**
 - Google Search grounding (real web access, current data)
@@ -558,33 +561,64 @@ Same role as 7.4.14 but a different specialty agent. Use whichever returns bette
 
 ---
 
-### 7.5 Ollama models (local + cloud)
+### 7.5 Ollama Cloud — adversarial reviewers (UPDATED 2026-05-20)
 
-| Where | Model | Size | Role in build |
-|---|---|---|---|
-| Cloud | `kimi-k2.6:cloud` | (cloud) | Optional third-opinion code review at M5 |
-| Cloud | `deepseek-v4-pro:cloud` | (cloud) | Optional second-opinion reasoner for stuck spots |
-| Cloud | `qwen3.5:cloud` | (cloud) | General fallback if Codex+Gemini both unavailable |
-| Cloud | `glm-5.1:cloud` | (cloud) | Idle |
-| Cloud | `gemma4:31b-cloud` | (cloud) | Idle |
-| Cloud | `gemini-3-flash-preview:latest` (Ollama proxy) | (cloud) | Same model the Gemini CLI uses — bypass option |
-| Local | `qwen2.5-coder:7b` | 4.7 GB | Offline code completion if internet drops |
-| Local | `deepseek-r1:8b` | 5.2 GB | Offline reasoning if internet drops |
-| Local | **`qwen3:4b`** | **2.5 GB** | **NPC barks at game-time, v1.1** |
-| Local | `qwen3.5:4b` | 3.4 GB | Alternative for NPC barks |
-| Local | `gemma3:4b` | 3.3 GB | Idle |
-| Local | `gemma4:e2b` | 7.2 GB | Idle |
-| Local | `llama3.2:3b` | 2.0 GB | Smallest NPC-bark candidate |
-| Local | `nomic-embed-text` | 274 MB | Embeddings (search/RAG, not needed yet) |
+Per user direction 2026-05-20, **local Ollama models are not used** — too small and slow for our purposes. We use Ollama exclusively as a portal to top-tier cloud-hosted models that supplement Codex + Gemini.
 
-**Repos Ollama touches at game-time (v1.1):**
-- Reads from browser via `ollama-js` calling `http://localhost:11434/api/chat` — does NOT touch your filesystem
+#### 7.5.1 `kimi-k2.6:cloud` — the open-source coding king
 
-**Best for v1.1+:**
-- `qwen3:4b` for NPC barks ("Help! That guy is FLYING!") — sub-200ms, runs offline, costs $0
+| Attribute | Value |
+|---|---|
+| **What it is** | Moonshot AI's Kimi K2.6, served via Ollama's cloud. MoE 42B-active / 1T-total. Currently the highest-scoring open-source model on real-world coding benchmarks (87/100). |
+| **Role in build** | Adversarial third-opinion code reviewer. Independent from Codex's gpt-5.5 lineage. |
+| **Invocation** | `echo "PROMPT" \| ollama run kimi-k2.6:cloud` or via HTTP API at `http://localhost:11434/api/chat` |
+| **Cost profile** | Your existing Ollama Cloud subscription |
 
-**Worst for v1:**
-- Don't use Ollama in the v1 build — it's a v1.1 feature
+**Used in Super for:**
+- M3 ship gate — independent review of physics integration (where Codex's review might miss things from its own scaffolding)
+- M5 ship gate — independent review of the entire codebase before deploy
+- Optional second opinion when Codex+Gemini disagree
+
+**Best for:** Adversarial review — catches code quality issues that the model that wrote the code might miss.
+
+#### 7.5.2 `deepseek-v4-pro:cloud` — the open-source reasoning king
+
+| Attribute | Value |
+|---|---|
+| **What it is** | DeepSeek's V4 Pro — successor to R1, strongest open-source reasoner as of May 2026 |
+| **Role in build** | Deep reasoning second opinion when an architectural choice is contentious |
+| **Invocation** | `echo "PROMPT" \| ollama run deepseek-v4-pro:cloud` or HTTP API |
+| **Cost profile** | Your existing Ollama Cloud subscription |
+
+**Used in Super for:**
+- M2 architecture decisions on the asset pipeline (independent of Codex)
+- M3 if Rapier integration gets confusing (independent reasoning chain)
+- Any "this approach feels wrong but I can't articulate why" moment
+
+**Best for:** Architectural reasoning. Independent confirmation on judgment calls.
+
+#### 7.5.3 Other available cloud models (catalogued for reference, not actively used)
+
+| Model | Catalogued role | Why we're not actively using it |
+|---|---|---|
+| `qwen3.5:cloud` | Could serve as a third reviewer | Kimi K2.6 covers this role better |
+| `glm-5.1:cloud` | Zhipu's flagship | Not better than what we have |
+| `gemma4:31b-cloud` | Google's Gemma 4 | Not better than Gemini 3.1 Pro for our use case |
+| `gemini-3-flash-preview:latest` (Ollama proxy) | Same as Gemini CLI's Flash mode | We use Gemini 3.1 Pro directly via the gemini CLI |
+
+#### 7.5.4 NPC barks at game-time (v1.1 — REVISED)
+
+Originally planned: local `qwen3:4b` at sub-200 ms for civilian dialogue. **Per user direction 2026-05-20, all local models are dropped.** Options for v1.1 NPC barks now:
+
+| Option | Tradeoff |
+|---|---|
+| Use `qwen3.5:cloud` via Ollama Cloud | Network latency (likely 400-1500 ms) — acceptable for ambient dialogue, not for fast reactions |
+| Pre-generate bark library at build time | Cheaper and faster at runtime ($0 latency), less dynamic per situation |
+| Drop NPC barks entirely from the v1.1 roadmap | Simpler; civilians use sound + pose only |
+
+**Recommendation:** Defer the NPC bark feature decision until M4 ships. By then we'll see how reactive the civilians need to be. If we want it: pre-generate a bark library with `kimi-k2.6:cloud` at build time, ~200 short lines covering the situations the AI emits.
+
+**Local models are NOT used in this project per your direction. Strict cloud-only.**
 
 ---
 
@@ -607,7 +641,7 @@ Same role as 7.4.14 but a different specialty agent. Use whichever returns bette
 
 | Milestone | Primary executor | Code reviewer | Asset / playtest | When you appear |
 |---|---|---|---|---|
-| **M1** (vertical slice) | Codex (high+priority) for M1.Task01-22 | `superpowers:code-reviewer` per task | None for M1 | M1 gate: playtest |
+| **M1** (vertical slice) | Codex (xhigh) for M1.Task01-22 | `superpowers:code-reviewer` per task | None for M1 | M1 gate: playtest |
 | **M2** (hero polish + asset pipeline) | Codex for pipeline scripts; me for tuning | `superpowers:code-reviewer` + `silent-failure-hunter` | You download Mixamo + Block Man + Kenney + Poly Haven | M2 gate: playtest, judge hero feel |
 | **M3** (combat) | Codex for physics integration; me for combat math + VFX | `superpowers:code-reviewer` + `coderabbit:code-reviewer` | You download Kenney Car Kit + Urban Kit | M3 gate: playtest combat loop |
 | **M4** (AI + audio) | Codex for AI systems; me for audio wiring | `superpowers:code-reviewer` + `pr-review-toolkit:silent-failure-hunter` (error handling) | You download Sonniss SFX + MacLeod music | M4 gate: playtest a populated city |
@@ -773,9 +807,10 @@ Each milestone gets its own task plan when its predecessor lands. M1 already has
 | 23 | M1 verification + git tag | n/a — tag `M1-vertical-slice` |
 
 **Agents assigned to M1:**
-- Codex `gpt-5.5` @ `priority`+`high` → Tasks 01-22 (all the implementation)
-- `superpowers:code-reviewer` subagent → after each task
+- **Codex `gpt-5.5` @ `xhigh` reasoning** → Tasks 01-22 (all implementation; depth over speed per user direction)
+- `superpowers:code-reviewer` subagent (Opus) → after each task
 - Me → orchestration, decision arbitration, Task 23 verification
+- (No adversarial reviewers needed at M1 — Codex+code-reviewer is sufficient for vertical-slice work)
 
 **Quality gate at end of M1:**
 - All Vitest unit tests pass
@@ -831,10 +866,11 @@ T21      M2 verification:
 ```
 
 **Agents for M2:**
-- Codex → pipeline scripts (multi-file, Codex's strength) + lighting integration
+- Codex @ `xhigh` → pipeline scripts (multi-file, Codex's strength) + lighting integration
 - Me → cape shader (single-file, my strength) + Mixamo rig debugging
 - `superpowers:code-reviewer` → per task
 - `pr-review-toolkit:silent-failure-hunter` → for asset pipeline (catches swallowed asset-load errors)
+- **`deepseek-v4-pro:cloud`** (via Ollama) → architectural second opinion on asset pipeline design before T01
 - You → Mixamo + Block Man + Kenney + Poly Haven downloads
 
 **Quality gate at end of M2:**
@@ -883,11 +919,13 @@ T24      M3 verification:
 ```
 
 **Agents for M3:**
-- Codex → Rapier integration + combat systems (multi-file)
+- Codex @ `xhigh` → Rapier integration + combat systems (multi-file)
 - Me → combat math (damage curves, knockback) + VFX
 - `superpowers:code-reviewer` → per task
 - `coderabbit:code-reviewer` → second opinion on Rapier integration (it's tricky)
+- **`kimi-k2.6:cloud`** (via Ollama) → adversarial code review on physics integration before merging (independent of Codex's gpt-5.5 lineage)
 - `pr-review-toolkit:silent-failure-hunter` → on physics WASM error handling
+- **`deepseek-v4-pro:cloud`** → reasoning second opinion on impulse-resolver math (where game-feel diverges from physical realism)
 - You → Kenney Car Kit + Urban Kit downloads; combat feel judgement
 
 ---
@@ -934,10 +972,11 @@ T23      M4 verification:
 ```
 
 **Agents for M4:**
-- Codex → AI systems (lots of code, modular)
+- Codex @ `xhigh` → AI systems (lots of code, modular)
 - Me → music director state machine (single-file)
 - `superpowers:code-reviewer` → per task
 - `pr-review-toolkit:silent-failure-hunter` → on AI error handling
+- **`deepseek-v4-pro:cloud`** → architectural reasoning on AI director's density math before T04
 - You → Sonniss SFX bundles + MacLeod music downloads
 
 ---
@@ -984,12 +1023,13 @@ T21      M5 verification — full v1 done definition check
 ```
 
 **Agents for M5:**
-- Codex → UI components (multi-file)
+- Codex @ `xhigh` → UI components (multi-file)
 - Me → save schema + corruption recovery + telemetry export
 - `superpowers:code-reviewer` → per task
 - `vercel:performance-optimizer` → final perf audit
 - `pr-review-toolkit:pr-test-analyzer` → test coverage gate
 - `pr-review-toolkit:code-reviewer` → style consistency gate
+- **`kimi-k2.6:cloud`** (via Ollama) → independent codebase audit before tagging v1.0.0
 - `vercel:deployment-expert` → if we use Vercel
 - You → final playthrough; deploy decision
 
@@ -1104,28 +1144,37 @@ npm run assets:validate         # sanity check
 npm run assets:bench            # load timing per asset
 ```
 
-### Codex direct invocation (if you want to drive one yourself)
+### Codex direct invocation (updated 2026-05-20 — `xhigh` is the default now)
 ```bash
-codex exec -c model_service_tier=priority -c model_reasoning_effort=high "Refactor X to do Y"
-codex exec -c model_reasoning_effort=xhigh "Deep architectural question"
+# Default for ALL serious tasks — max capability:
+codex exec -c model_reasoning_effort=xhigh "..."
+
+# Speed-critical exception (rare, not needed in M1-M5):
+codex exec -c model_service_tier=priority -c model_reasoning_effort=high "..."
 ```
 
-### Gemini direct invocation
+### Gemini direct invocation (updated 2026-05-20 — Pro is the default now)
 ```bash
-gemini -m gemini-3-flash-preview -y -p "Is library X still the recommended pick in 2026?"
-gemini -m gemini-3.1-pro-preview -y -p "Deep research on Z"
+# Default for fact-check + deep research — most-capable Gemini 3 available:
+gemini -m gemini-3.1-pro-preview -y -p "..."
+
+# Fallback if Pro hits capacity:
+gemini -m gemini-2.5-pro -y -p "..."
 ```
 
-### Ollama (v1.1 game-time only)
+### Ollama Cloud adversarial reviewers (updated 2026-05-20 — cloud only)
 ```bash
-# Verify daemon
+# Verify daemon (always running in your setup)
 curl http://localhost:11434/api/version
-ollama list
-ollama ps
 
-# Quick query (game-time, called from browser via ollama-js)
-ollama run qwen3:4b "You are an NPC in a superhero game. Reply with ONE short sentence."
+# Kimi K2.6 cloud — open-source coding leader, adversarial code review:
+echo "Review this diff for bugs..." | ollama run kimi-k2.6:cloud
+
+# DeepSeek V4 Pro cloud — open-source reasoning leader, architectural second opinion:
+echo "Critique this architecture..." | ollama run deepseek-v4-pro:cloud
 ```
+
+**Local Ollama models are NOT used in this build per your direction.**
 
 ### When you want to override / pause / change scope
 - Just tell me. I pause whatever's running, fix or revise, then continue.
@@ -1194,8 +1243,8 @@ Total of YOUR active time: ~4-6 hours spread across the project. Most of the bui
 | Anthropic Claude Code | Your plan |
 | OpenAI Codex (gpt-5.5 priority tier) | Your OpenAI plan; priority tier consumes quota faster but is 1.5× speed |
 | Google Gemini CLI | Free tier (or your plan) |
-| Ollama (cloud models) | Your existing paid Ollama plan |
-| Ollama (local) | $0 |
+| Ollama Cloud (kimi-k2.6, deepseek-v4-pro) | Your existing paid Ollama Cloud plan |
+| Ollama local | NOT USED per your direction |
 | External assets (Mixamo, Kenney, Quaternius, Poly Haven, Sonniss, MacLeod) | $0 (CC0/free commercial) |
 | Meshy.ai (optional hero upgrade) | $20/mo Hobbyist tier (optional) |
 | itch.io hosting (if you ship there) | $0 |
