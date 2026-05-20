@@ -1,99 +1,85 @@
-import { eventBus } from './event-bus.js';
+export function createInputRouter() {
+  return {
+    _keys: {},
+    _pressedBuffer: {},
+    _pressedFrame: {},
+    _pendingMouseX: 0,
+    _pendingMouseY: 0,
+    mouseDeltaX: 0,
+    mouseDeltaY: 0,
+    pointerLocked: false,
+    canvas: null,
 
-class InputRouter {
-  constructor() {
-    this.keys = new Set();
-    this.justPressed = new Set();
-    this.buffer = new Set();
+    attach(canvas, target = window, doc = document) {
+      this.canvas = canvas;
+      target.addEventListener('keydown', event => this.handleKeyDown(event));
+      target.addEventListener('keyup', event => this.handleKeyUp(event));
+      target.addEventListener('blur', () => this.clear());
+      target.addEventListener('mousemove', event => this.handleMouseMove(event));
+      canvas.addEventListener('click', () => canvas.requestPointerLock?.());
+      canvas.addEventListener('contextmenu', event => event.preventDefault());
+      doc.addEventListener('pointerlockchange', () => {
+        this.pointerLocked = doc.pointerLockElement === canvas;
+      });
+    },
 
-    this.mouse = {
-      x: 0,
-      y: 0,
-      dx: 0,
-      dy: 0,
-      buttons: new Set()
-    };
+    handleKeyDown(event) {
+      if (!this._keys[event.code]) this._pressedBuffer[event.code] = true;
+      this._keys[event.code] = true;
+      event.preventDefault?.();
+    },
 
-    this.boundKeyDown = this.onKeyDown.bind(this);
-    this.boundKeyUp = this.onKeyUp.bind(this);
-    this.boundMouseMove = this.onMouseMove.bind(this);
-    this.boundMouseDown = this.onMouseDown.bind(this);
-    this.boundMouseUp = this.onMouseUp.bind(this);
+    handleKeyUp(event) {
+      this._keys[event.code] = false;
+    },
 
-    this.enabled = false;
-  }
+    handleMouseMove(event) {
+      if (!this.pointerLocked) return;
+      this._pendingMouseX += event.movementX || 0;
+      this._pendingMouseY += event.movementY || 0;
+    },
 
-  enable() {
-    if (this.enabled) return;
-    window.addEventListener('keydown', this.boundKeyDown);
-    window.addEventListener('keyup', this.boundKeyUp);
-    window.addEventListener('mousemove', this.boundMouseMove);
-    window.addEventListener('mousedown', this.boundMouseDown);
-    window.addEventListener('mouseup', this.boundMouseUp);
-    this.enabled = true;
-  }
+    setPointerLocked(pointerLocked) {
+      this.pointerLocked = pointerLocked;
+    },
 
-  disable() {
-    if (!this.enabled) return;
-    window.removeEventListener('keydown', this.boundKeyDown);
-    window.removeEventListener('keyup', this.boundKeyUp);
-    window.removeEventListener('mousemove', this.boundMouseMove);
-    window.removeEventListener('mousedown', this.boundMouseDown);
-    window.removeEventListener('mouseup', this.boundMouseUp);
-    this.enabled = false;
-  }
+    update() {
+      this._pressedFrame = this._pressedBuffer;
+      this._pressedBuffer = {};
+      this.mouseDeltaX = this._pendingMouseX;
+      this.mouseDeltaY = this._pendingMouseY;
+      this._pendingMouseX = 0;
+      this._pendingMouseY = 0;
+    },
 
-  onKeyDown(e) {
-    if (!this.keys.has(e.code)) {
-      this.buffer.add(e.code);
-    }
-    this.keys.add(e.code);
-    
-    if (e.code === 'Backquote') {
-      eventBus.emit('ui.toggleConsole');
-    }
-  }
+    clear() {
+      this._keys = {};
+      this._pressedBuffer = {};
+      this._pressedFrame = {};
+      this._pendingMouseX = 0;
+      this._pendingMouseY = 0;
+      this.mouseDeltaX = 0;
+      this.mouseDeltaY = 0;
+    },
 
-  onKeyUp(e) {
-    this.keys.delete(e.code);
-  }
+    isDown(code) {
+      return !!this._keys[code];
+    },
 
-  onMouseMove(e) {
-    this.mouse.dx += e.movementX;
-    this.mouse.dy += e.movementY;
-    this.mouse.x = e.clientX;
-    this.mouse.y = e.clientY;
-  }
+    isPressed(code) {
+      return !!this._pressedFrame[code];
+    },
 
-  onMouseDown(e) {
-    this.mouse.buttons.add(e.button);
-  }
-
-  onMouseUp(e) {
-    this.mouse.buttons.delete(e.button);
-  }
-
-  update() {
-    this.justPressed = new Set(this.buffer);
-    this.buffer.clear();
-
-    // Reset mouse delta after it's been consumed by systems
-    // This is usually done at the end of the frame or by systems themselves.
-    // For now, we'll let the engine loop call a clear method.
-  }
-
-  clearMouseDelta() {
-    this.mouse.dx = 0;
-    this.mouse.dy = 0;
-  }
-
-  isDown(code) {
-    return this.keys.has(code);
-  }
-
-  isJustPressed(code) {
-    return this.justPressed.has(code);
-  }
+    getFlightIntent() {
+      return {
+        pitch: (this.isDown('KeyS') ? 1 : 0) - (this.isDown('KeyW') ? 1 : 0),
+        yaw: (this.isDown('KeyD') ? 1 : 0) - (this.isDown('KeyA') ? 1 : 0),
+        throttle: this.isDown('KeyW') ? 1 : 0,
+        brake: this.isDown('KeyS') ? 1 : 0,
+        boost: this.isDown('ShiftLeft') || this.isDown('ShiftRight'),
+        lookX: this.mouseDeltaX,
+        lookY: this.mouseDeltaY,
+      };
+    },
+  };
 }
-
-export const inputRouter = new InputRouter();
