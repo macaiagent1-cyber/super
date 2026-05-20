@@ -37,7 +37,11 @@ export function createBuildingForLot({ lot, rng, heightBias }) {
       y: roundedHeight,
       z: Number(depth.toFixed(2)),
     },
-    color: `hsl(${hue} ${sat}% ${light}%)`,
+    // Three.js's CSS-color parser requires legacy comma-separated HSL
+    // (`hsl(225, 15%, 30%)`). Modern space-separated form (`hsl(225 15% 30%)`)
+    // doesn't match its regex and silently returns white — the reason every
+    // building in earlier builds looked uniformly white despite this palette.
+    color: `hsl(${hue}, ${sat}%, ${light}%)`,
     lot,
   };
 }
@@ -46,6 +50,6 @@ export function createRoadSegment({ x, z, width, depth }) {
   return {
     position: { x, y: 0.03, z },
     size: { x: width, y: 0.06, z: depth },
-    color: 'hsl(220 9% 12%)',  // darker asphalt — was 18% lightness, too pale
+    color: 'hsl(220, 9%, 12%)',  // dark asphalt; comma-separated (THREE.js regex requirement)
   };
 }

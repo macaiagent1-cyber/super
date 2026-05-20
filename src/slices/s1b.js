@@ -284,6 +284,19 @@ export async function startS1B() {
 
   window.addEventListener('pagehide', persistSave);
 
+  // Dev hook: expose the live scene/renderer/hero so Playwright + browser
+  // console can introspect material colors, sample positions, force-trigger
+  // states, etc. without recompiling. Cheap, runs once, no leak.
+  window.__SUPER__ = {
+    scene: renderSystem.scene,
+    camera: renderSystem.camera,
+    renderer: renderSystem.renderer,
+    hero,
+    district,
+    audioBus,
+    physics: physicsWorld,
+  };
+
   const loop = createEngineLoop({
     clock,
     input,
