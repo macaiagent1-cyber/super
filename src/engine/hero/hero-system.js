@@ -1,38 +1,49 @@
 import * as THREE from 'three';
-import { sceneRoots } from '../render/scene-roots.js';
-import { heroFlight } from './hero-flight.js';
+import { createFlightState, stepFlight } from './hero-flight.js';
 
-class HeroSystem {
-  constructor() {
-    this.root = new THREE.Group();
-    this.transform = this.root;
-    this.mesh = null;
-    
-    this.state = {
-      transform: this.transform,
-      velocity: new THREE.Vector3(),
-      mode: 'flight' // flight, ground
-    };
+export function createHeroSystem({ scene } = {}) {
+  const state = createFlightState();
+  const mesh = scene ? createHeroMesh() : null;
+  if (scene && mesh) scene.add(mesh);
+
+  function syncMesh() {
+    if (!mesh) return;
+    mesh.position.set(state.position.x, state.position.y, state.position.z);
+    mesh.rotation.set(state.pitch, state.yaw, state.bank, 'YXZ');
   }
 
-  init() {
-    // Placeholder mesh
-    const geometry = new THREE.BoxGeometry(1, 2, 1);
-    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-    this.mesh = new THREE.Mesh(geometry, material);
-    this.root.add(this.mesh);
-    
-    sceneRoots.world.add(this.root);
-    
-    // Initial position
-    this.root.position.set(0, 50, 0);
-  }
-
-  update(dt) {
-    if (this.state.mode === 'flight') {
-      heroFlight.update(dt, this.state);
-    }
-  }
+  return {
+    state,
+    mesh,
+    update(input, dt, collisionWorld = null) {
+      const next = stepFlight(state, input, dt);
+      Object.assign(state, next);
+      if (collisionWorld) {
+        const resolved = collisionWorld.resolveCapsule(state.position, 0.55, 1.9);
+        state.position = resolved.position;
+        if (resolved.hitGround && state.velocity.y < 0) state.velocity.y = 0;
+      }
+      syncMesh();
+    },
+    setPosition(position) {
+      state.position = { ...position };
+      syncMesh();
+    },
+  };
 }
 
-export const heroSystem = new HeroSystem();
+function createHeroMesh() {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.45, 1.15, 6, 12),
+    new THREE.MeshStandardMaterial({ color: 0x265cff, roughness: 0.55 })
+  );
+  body.rotation.x = Math.PI / 2;
+  const cape = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 0.06, 1.8),
+    new THREE.MeshStandardMaterial({ color: 0xd51f2a, roughness: 0.7 })
+  );
+  cape.position.set(0, -0.05, 0.7);
+  group.add(body, cape);
+  return group;
+}
