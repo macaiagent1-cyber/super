@@ -22,6 +22,7 @@ import { computeCameraRig, updateThreeCamera } from '../engine/render/camera-rig
 import { addBatchedBuildings, addRoadMeshes } from '../engine/render/instancing-system.js';
 import { createRenderSystem } from '../engine/render/render-system.js';
 import { createHudOverlay } from '../engine/ui/hud-overlay.js';
+import { createPauseMenu } from '../engine/ui/pause-menu.js';
 import { createCollisionWorld } from '../engine/world/collision-world.js';
 import { generateDistrict } from '../engine/world/district-generator.js';
 
@@ -142,6 +143,8 @@ export async function startS1B() {
   const clock = createClock({ fixedStep: RENDER.fixedStep, maxDelta: RENDER.maxDelta });
   const cameraMemory = { x: 0, y: 38, z: 145 };
   let wasBoosting = false;
+  let paused = false;
+  let mouseSensitivity = 1;
 
   function updateEnergy(intent, dt) {
     if (intent.boost) heroEnergy.current = Math.max(0, heroEnergy.current - 25 * dt);
@@ -168,12 +171,66 @@ export async function startS1B() {
   });
   attachDevConsole({ inputElement: inputEl, outputElement: outputEl, devConsole });
 
+  const pauseMenu = createPauseMenu({
+    root: document.body,
+    onResume: () => {
+      setPaused(false, { requestPointerLock: true });
+    },
+    onSetSeed: newSeed => {
+      const next = new URL(window.location.href);
+      next.searchParams.set('seed', String(newSeed));
+      window.location.href = next.toString();
+    },
+    onSetQuality: quality => {
+      document.body.dataset.quality = quality;
+    },
+    onSetVolume: volume => {
+      audioBus.setMusicVolume?.(volume);
+    },
+    onSetSensitivity: sensitivity => {
+      mouseSensitivity = sensitivity;
+      document.body.dataset.sensitivity = String(sensitivity);
+    },
+  });
+
+  function setPaused(nextPaused, { requestPointerLock = false } = {}) {
+    if (paused === nextPaused) {
+      if (!paused && requestPointerLock) canvas.requestPointerLock?.();
+      return;
+    }
+
+    paused = nextPaused;
+    clock.setTimeScale(paused ? 0 : 1);
+    input.clear();
+
+    if (paused) {
+      pauseMenu.show();
+      if (document.pointerLockElement === canvas) document.exitPointerLock?.();
+    } else {
+      pauseMenu.hide();
+      if (requestPointerLock) canvas.requestPointerLock?.();
+    }
+  }
+
+  window.addEventListener('keydown', event => {
+    if (event.code !== 'Escape' || event.repeat) return;
+    event.preventDefault?.();
+    setPaused(!paused, { requestPointerLock: paused });
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement !== canvas && !paused) setPaused(true);
+  });
+
   const loop = createEngineLoop({
     clock,
     input,
     resize: renderSystem.resize,
     update(dt) {
+      if (paused) return;
       const intent = input.getFlightIntent();
+      intent.lookX *= mouseSensitivity;
+      intent.lookY *= mouseSensitivity;
       if (heroEnergy.current < 8) {
         intent.boost = false;
         intent.heatVision = false;
@@ -245,6 +302,7 @@ export async function startS1B() {
       }
     },
     render(timing) {
+      const frameDt = paused ? 0 : (timing.dt || RENDER.fixedStep);
       for (const car of cars) {
         const t = car.body.translation();
         const r = car.body.rotation?.() ?? { x: 0, y: 0, z: 0, w: 1 };
@@ -261,16 +319,16 @@ export async function startS1B() {
           );
           car.mesh.material.opacity = state.dead ? 0.45 : 1 - damageT * 0.2;
           if (state.dead && car.mesh.position.y > -8) {
-            car.sinkOffset = Math.min(car.sinkOffset + (timing.dt || RENDER.fixedStep), 10);
+            car.sinkOffset = Math.min(car.sinkOffset + frameDt, 10);
             car.mesh.position.y -= car.sinkOffset;
           }
         }
       }
-      const pose = computeCameraRig({ hero: hero.state, previous: cameraMemory, dt: timing.dt || RENDER.fixedStep });
+      const pose = computeCameraRig({ hero: hero.state, previous: cameraMemory, dt: frameDt });
       Object.assign(cameraMemory, pose.position);
       updateThreeCamera(renderSystem.camera, pose);
       renderSystem.render();
-      perfHud.update(timing.dt || RENDER.fixedStep);
+      perfHud.update(frameDt);
     },
   });
 

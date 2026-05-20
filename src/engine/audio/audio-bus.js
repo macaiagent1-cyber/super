@@ -119,6 +119,11 @@ export function createAudioBus() {
     }
   }
 
+  function setMusicVolume(value) {
+    if (!musicNodes?.gain) return;
+    musicNodes.gain.gain.value = Math.max(0, Math.min(1, value)) * 0.06;
+  }
+
   function stopMusic() {
     if (!musicNodes) return;
     for (const o of musicNodes.oscs) o.stop();
@@ -129,6 +134,7 @@ export function createAudioBus() {
   return {
     ensureContext,
     startMusic,
+    setMusicVolume,
     stopMusic,
     boostWhoosh() {
       playTone({ frequency: 380, duration: 0.5, type: 'sawtooth', volume: 0.25 });
