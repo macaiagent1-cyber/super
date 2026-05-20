@@ -4,6 +4,7 @@ import { RENDER } from '../engine/core/constants.js';
 import { createEngineLoop } from '../engine/core/engine-loop.js';
 import { eventBus } from '../engine/core/event-bus.js';
 import { createCivilianSystem } from '../engine/ai/civilian-ai.js';
+import { createThreatSystem } from '../engine/ai/threat-ai.js';
 import { createTrafficSystem } from '../engine/ai/traffic-ai.js';
 import { createAudioBus } from '../engine/audio/audio-bus.js';
 import { createInputRouter } from '../engine/core/input-router.js';
@@ -116,6 +117,16 @@ export async function startS1B() {
   input.attach(canvas);
   const hero = createHeroSystem({ scene: renderSystem.scene, csm: renderSystem.csm, physicsWorld });
   hero.setPosition({ x: 0, y: 34, z: 120 });
+  const threats = createThreatSystem({
+    scene: renderSystem.scene,
+    physicsWorld,
+    audioBus,
+    eventBus,
+    seed,
+    count: 6,
+    csm: renderSystem.csm,
+  });
+  threats.update(0, hero.state);
 
   const perfHud = createPerfHud({ root: hudRoot, renderSystem });
   const clock = createClock({ fixedStep: RENDER.fixedStep, maxDelta: RENDER.maxDelta });
@@ -154,27 +165,51 @@ export async function startS1B() {
       grabSystem.update(hero.state, intent, dt);
       physicsWorld.step(dt);
       heatVision.update(hero.state, intent, dt);
+      if (intent.heatVision) {
+        const eyeOrigin = {
+          x: hero.state.position.x,
+          y: hero.state.position.y + 0.6,
+          z: hero.state.position.z,
+        };
+        const fwd = getForwardVector(hero.state.yaw, hero.state.pitch);
+        const physicsHit = physicsWorld.raycast(eyeOrigin, fwd, 80);
+        const droneHit = threats.raycastDrones(eyeOrigin, fwd, 80);
+        if (droneHit && (!physicsHit || droneHit.distance <= physicsHit.distance)) {
+          threats.damageDrone(droneHit.drone.mesh, 30 * dt);
+        }
+      }
+      threats.update(dt, hero.state);
       civilians.update(dt, hero.state);
       traffic.update(dt);
       impactFx.update(dt);
       if (intent.punch) {
         const fwd = getForwardVector(hero.state.yaw, hero.state.pitch);
-        const result = tryPunch({
-          origin: hero.state.position,
-          forward: fwd,
-          physicsWorld,
-          strength: 2200,
-          range: 3,
-          eventBus,
-        });
-        if (result) {
+        const droneHit = threats.raycastDrones(hero.state.position, fwd, 6);
+        if (droneHit) {
+          threats.damageDrone(droneHit.drone.mesh, 40);
           impactFx.spawn({
-            position: result.point,
+            position: droneHit.drone.mesh.position,
             normal: { x: -fwd.x, y: -fwd.y, z: -fwd.z },
           });
           audioBus.punchImpact();
-          if (result.bodyHandle !== undefined) {
-            destructibles.damage(result.bodyHandle, 45);
+        } else {
+          const result = tryPunch({
+            origin: hero.state.position,
+            forward: fwd,
+            physicsWorld,
+            strength: 2200,
+            range: 3,
+            eventBus,
+          });
+          if (result) {
+            impactFx.spawn({
+              position: result.point,
+              normal: { x: -fwd.x, y: -fwd.y, z: -fwd.z },
+            });
+            audioBus.punchImpact();
+            if (result.bodyHandle !== undefined) {
+              destructibles.damage(result.bodyHandle, 45);
+            }
           }
         }
       }
