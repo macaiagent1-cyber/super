@@ -219,7 +219,7 @@ function createBloomComposer({ renderer, scene, camera, canvas }) {
   const width = canvas.clientWidth || window.innerWidth;
   const height = canvas.clientHeight || window.innerHeight;
   const composer = new EffectComposer(renderer);
-  const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.6, 0.4, 0.85);
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.45, 0.4, 0.85);
 
   if (isSoftwareWebGLRenderer(renderer)) {
     composer.setPixelRatio(SOFTWARE_WEBGL_COMPOSER_PIXEL_RATIO);
