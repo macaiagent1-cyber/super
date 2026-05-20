@@ -20,7 +20,10 @@ const DEFAULTS = Object.freeze({
   settings: Object.freeze({
     quality: 'high',
     mouseSensitivity: 1.0,
-    musicVolume: 0.5,
+    // Default-muted: the player can turn music up via the pause-menu slider
+    // if they want it, but a fresh session is silent by design. The user
+    // explicitly asked for "if anything please mute it".
+    musicVolume: 0,
     backend: 'auto',
   }),
   progress: Object.freeze({

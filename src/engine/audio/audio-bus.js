@@ -28,6 +28,11 @@ export function createAudioBus() {
         ctx = new AudioContextCtor();
       }
       Howler.autoUnlock = true;
+      // Hard mute master output by default. The pause-menu music slider can
+      // still raise the per-Howl volume to make music audible, but procedural
+      // SFX (boost whoosh, punch, dodge, etc.) route through this masterGain
+      // and stay silent unless the user explicitly enables audio.
+      Howler.volume(0);
       initialized = true;
       ctx.resume?.();
     } catch (error) {
