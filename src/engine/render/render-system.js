@@ -94,14 +94,15 @@ export async function createRenderSystem({ canvas, forceWebGL2 = false } = {}) {
       renderer.render(scene, camera);
     },
     getStats() {
-      // WebGPU's `info.render.calls` is CUMULATIVE since app start; only
-      // `info.render.frameCalls` is per-frame. WebGL2's `info.render.calls`
-      // IS per-frame (autoReset). Prefer frameCalls when available so the
-      // HUD reports a meaningful number on both backends. The runtime audit
-      // caught this — earlier the HUD reported "Draws 21,182" which was
-      // actually 21k draws *since page load*, not per-frame.
+      // Three.js info fields differ by backend:
+      //   WebGPU:  info.render.calls = cumulative since page load (useless)
+      //            info.render.frameCalls = render() invocations this frame
+      //            info.render.drawCalls = actual GPU draw commands this frame ← what we want
+      //   WebGL2:  info.render.calls = per-frame draw commands (autoReset)
+      //            info.render.drawCalls = same as calls
+      // Prefer drawCalls when present; fall back to calls for older builds.
       const info = renderer.info;
-      const calls = info.render.frameCalls ?? info.render.calls;
+      const calls = info.render.drawCalls ?? info.render.calls;
       return {
         calls,
         triangles: info.render.triangles,
