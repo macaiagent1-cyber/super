@@ -1,73 +1,47 @@
-import { clock } from './clock.js';
-import { inputRouter } from './input-router.js';
-import { logger } from './logger.js';
-import { eventBus } from './event-bus.js';
+export function createEngineLoop({
+  clock,
+  input,
+  update,
+  render,
+  resize,
+  requestFrame = window.requestAnimationFrame.bind(window),
+  cancelFrame = window.cancelAnimationFrame.bind(window),
+}) {
+  let running = false;
+  let frameHandle = null;
+  let frameCount = 0;
 
-class EngineLoop {
-  constructor() {
-    this.systems = [];
-    this.renderSystem = null;
-    this.running = false;
-    this.frameId = null;
-
-    this.onFrame = this.onFrame.bind(this);
+  function frame(nowMs) {
+    if (!running) return;
+    step(nowMs);
+    frameHandle = requestFrame(frame);
   }
 
-  setRenderSystem(renderSystem) {
-    this.renderSystem = renderSystem;
-  }
-
-  addSystem(system) {
-    this.systems.push(system);
-  }
-
-  start() {
-    if (this.running) return;
-    logger.info('engine', 'Starting engine loop');
-    this.running = true;
-    clock.start();
-    inputRouter.enable();
-    this.frameId = requestAnimationFrame(this.onFrame);
-  }
-
-  stop() {
-    this.running = false;
-    if (this.frameId) cancelAnimationFrame(this.frameId);
-    inputRouter.disable();
-  }
-
-  onFrame(now) {
-    if (!this.running) return;
-
-    if (clock.update(now)) {
-      inputRouter.update();
-
-      // Fixed step updates for physics/AI/logic
-      while (clock.consumeFixedStep()) {
-        for (const system of this.systems) {
-          if (system.fixedUpdate) {
-            system.fixedUpdate(clock.fixedStep);
-          }
-        }
-      }
-
-      // Variable step updates
-      for (const system of this.systems) {
-        if (system.update) {
-          system.update(clock.dt);
-        }
-      }
-
-      // Render
-      if (this.renderSystem) {
-        this.renderSystem.render(clock.dt, clock.alpha);
-      }
-
-      inputRouter.clearMouseDelta();
+  function step(nowMs) {
+    const timing = clock.tick(nowMs);
+    input.update();
+    for (let i = 0; i < timing.steps; i += 1) {
+      update(timing.fixedStep, timing);
     }
-
-    this.frameId = requestAnimationFrame(this.onFrame);
+    render(timing);
+    frameCount += 1;
   }
-}
 
-export const engineLoop = new EngineLoop();
+  return {
+    start() {
+      if (running) return;
+      running = true;
+      resize();
+      frameHandle = requestFrame(frame);
+    },
+    stop() {
+      running = false;
+      if (frameHandle !== null) cancelFrame(frameHandle);
+      frameHandle = null;
+    },
+    step,
+    getFrameCount() {
+      return frameCount;
+    },
+  };
+}
