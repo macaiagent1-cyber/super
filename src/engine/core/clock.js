@@ -1,60 +1,56 @@
-import { PHYSICS_STEP, MAX_DT } from './constants.js';
+export function createClock({ fixedStep = 1 / 60, maxDelta = 0.05 } = {}) {
+  let lastMs = null;
+  let accumulator = 0;
+  let timeScale = 1;
+  let hitstopRemaining = 0;
+  let frame = 0;
 
-class Clock {
-  constructor() {
-    this.startTime = 0;
-    this.currentTime = 0;
-    this.elapsed = 0;
-    this.dt = 0;
-    this.frame = 0;
-    this.paused = false;
-    this.timeScale = 1.0;
-    
-    this.accumulator = 0;
-    this.fixedStep = PHYSICS_STEP;
-  }
+  return {
+    tick(nowMs) {
+      if (lastMs === null) {
+        lastMs = nowMs;
+        return { frame, rawDt: 0, dt: 0, steps: 0, alpha: 0, fixedStep };
+      }
 
-  start() {
-    this.startTime = performance.now() / 1000;
-    this.currentTime = this.startTime;
-  }
+      const rawDt = Math.max(0, (nowMs - lastMs) / 1000);
+      lastMs = nowMs;
 
-  update(nowMs) {
-    const now = nowMs / 1000;
-    let frameDt = now - this.currentTime;
-    this.currentTime = now;
+      let dt = Math.min(rawDt, maxDelta);
+      if (hitstopRemaining > 0) {
+        const consumed = Math.min(hitstopRemaining, dt);
+        hitstopRemaining -= consumed;
+        dt -= consumed;
+      }
+      dt *= timeScale;
 
-    if (this.paused) {
-      this.dt = 0;
-      return false;
-    }
+      accumulator += dt;
+      let steps = 0;
+      while (accumulator >= fixedStep) {
+        accumulator -= fixedStep;
+        steps += 1;
+      }
+      frame += 1;
 
-    // Clamp dt to avoid huge jumps (e.g. after tab backgrounding)
-    if (frameDt > MAX_DT) frameDt = MAX_DT;
-    
-    this.dt = frameDt * this.timeScale;
-    this.elapsed += this.dt;
-    this.frame++;
-
-    this.accumulator += this.dt;
-    
-    return true;
-  }
-
-  consumeFixedStep() {
-    if (this.accumulator >= this.fixedStep) {
-      this.accumulator -= this.fixedStep;
-      return true;
-    }
-    return false;
-  }
-
-  get alpha() {
-    return this.accumulator / this.fixedStep;
-  }
-
-  pause() { this.paused = true; }
-  resume() { this.paused = false; }
+      return {
+        frame,
+        rawDt,
+        dt,
+        steps,
+        alpha: accumulator / fixedStep,
+        fixedStep,
+      };
+    },
+    setTimeScale(nextScale) {
+      timeScale = Math.max(0, nextScale);
+    },
+    addHitstop(seconds) {
+      hitstopRemaining = Math.max(hitstopRemaining, seconds);
+    },
+    reset(nowMs = null) {
+      lastMs = nowMs;
+      accumulator = 0;
+      hitstopRemaining = 0;
+      frame = 0;
+    },
+  };
 }
-
-export const clock = new Clock();
